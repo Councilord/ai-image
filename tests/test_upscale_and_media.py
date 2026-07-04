@@ -144,3 +144,8 @@ def test_image_edit_handler_routes_to_depth_path_only_when_enabled(monkeypatch) 
     result = app._edit_handler("input.png", "reference.png", "prompt", "negative", "out", 4, 1.0, 1.0, 0, "default", False, False, True)
     assert result == ("depth.png", "depth")
     assert calls[0][0] == "depth"
+
+
+def test_app_default_engine_is_int8() -> None:
+    assert app.DEFAULT_ENGINE_VALUE == "int8"
+    assert app.ENGINE_CHOICES[0] == ("INT8 (fastest on Ampere - default)", "int8")

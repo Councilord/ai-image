@@ -53,6 +53,8 @@ if errorlevel 1 (
 )
 
 echo Launching the local image app...
+echo Open the app at http://%COMFYUI_HOST%:%COMFYUI_UI_PORT%  (ComfyUI engine runs separately at http://%COMFYUI_HOST%:%COMFYUI_PORT%)
+start "" "http://%COMFYUI_HOST%:%COMFYUI_UI_PORT%"
 python -m comfyui_app.app
 set "APP_EXIT=%errorlevel%"
 

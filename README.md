@@ -80,6 +80,12 @@ The installer tries to add that support automatically, but it is best-effort. If
 
 The fallback upscaler uses the core ComfyUI `UpscaleModelLoader` + `ImageUpscaleWithModel` path and the already-resolved `RealESRGAN_x2plus.pth` checkpoint in `ComfyUI/models/upscale_models/`.
 
+## Engine choices
+
+- **INT8** is the default engine in the UI and install flow.
+- **fp8** stays selectable for guaranteed compatibility.
+- **GGUF Q4/Q5** remains available on the lower-VRAM tier path.
+
 ### Video output
 
 Video upscaling reassembles frames with `imageio-ffmpeg` and preserves the original audio track when present:
@@ -107,7 +113,7 @@ Batch jobs now write into a timestamped per-run subfolder under the chosen outpu
 
 | Area | Default | Why |
 | --- | --- | --- |
-| Diffusion | FLUX.2 Klein 4B fp8 | Small enough to fit on 8 GB with ComfyUI offload. |
+| Diffusion | FLUX.2 Klein 4B INT8 | Native INT8 tensor cores on Ampere are faster than emulated fp8, with the same VRAM class. |
 | Text encoder | Qwen 3 4B fp4 | Lower VRAM than fp16/bf16. |
 | VAE | FLUX.2 small decoder | Best default fit for the app's edit flow. |
 | Decode | Tiled by default on low-memory tiers | Helps keep 8 GB cards from spiking. |
@@ -115,7 +121,9 @@ Batch jobs now write into a timestamped per-run subfolder under the chosen outpu
 
 Why this stack:
 
-- The RTX 3070 is Ampere, so fp8 is mainly a VRAM win rather than a compute win.
+- The RTX 3070 is Ampere, so INT8 runs on native tensor cores while fp8 is emulated.
+- Expect roughly a 25-35% steady-state speedup versus fp8, with near-lossless quality for this model.
+- The first run in a session is slower because kernels warm up; after that the INT8 path is the fastest default.
 - The small decoder VAE keeps the edit pipeline compact.
 - ComfyUI's offload model works well for the 8 GB target.
 

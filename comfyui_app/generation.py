@@ -46,7 +46,7 @@ def _manifest_models(
     vram_gb: float,
     token: str | None,
     prefer_gguf: bool = False,
-    engine: str = "default",
+    engine: str = "int8",
 ) -> dict[str, dict[str, object]]:
     manifest = load_resolved_manifest()
     if isinstance(manifest, dict):
@@ -159,7 +159,7 @@ def run_edit(
     use_tiled_decode: bool | None = None,
     timeout: float = 600.0,
     prefer_gguf: bool = False,
-    engine: str = "default",
+    engine: str = "int8",
     use_torch_compile: bool = False,
     mrflow: bool = False,
     mrflow_low_width: int = 512,

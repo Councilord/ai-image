@@ -24,7 +24,8 @@ from comfyui_app.video_frames import extract_frames, frames_to_video, probe_vide
 logger = logging.getLogger(__name__)
 
 ENGINE_CHOICES = [
-    ("fp8 (default)", "default"),
+    ("INT8 (fastest on Ampere - default)", "int8"),
+    ("fp8", "default"),
     ("Nunchaku INT4 (experimental - faster, needs extra install)", "nunchaku_int4"),
 ]
 UPSCALER_CHOICES = [
@@ -33,6 +34,7 @@ UPSCALER_CHOICES = [
 ]
 QUALITY_CHOICES = [("LOW", "LOW"), ("MEDIUM", "MEDIUM"), ("HIGH", "HIGH"), ("ULTRA", "ULTRA")]
 VIDEO_EXTS = [".mp4", ".mov"]
+DEFAULT_ENGINE_VALUE = "int8"
 
 
 def _friendly_error(exc: Exception) -> str:
@@ -384,7 +386,7 @@ def build_app() -> "gr.Blocks":
                     edit_cfg = gr.Number(label="Guidance", value=1.0)
                     edit_megapixels = gr.Number(label="Megapixels", value=1.0)
                     edit_seed = gr.Number(label="Seed", value=0, precision=0)
-                    edit_engine = gr.Dropdown(label="Engine", choices=ENGINE_CHOICES, value="default")
+                    edit_engine = gr.Dropdown(label="Engine", choices=ENGINE_CHOICES, value=DEFAULT_ENGINE_VALUE)
                     edit_compile = gr.Checkbox(
                         label="torch.compile (requires Triton from experimental speedups; limited gain on Ampere; faster after warmup, slower first run, recompiles on resolution change)",
                         value=False,
@@ -426,7 +428,7 @@ def build_app() -> "gr.Blocks":
                     edit_cfg = gr.Number(label="Guidance", value=1.0)
                     edit_megapixels = gr.Number(label="Megapixels", value=1.0)
                     edit_seed = gr.Number(label="Seed", value=0, precision=0)
-                    edit_engine = gr.Dropdown(label="Engine", choices=ENGINE_CHOICES, value="default")
+                    edit_engine = gr.Dropdown(label="Engine", choices=ENGINE_CHOICES, value=DEFAULT_ENGINE_VALUE)
                     edit_compile = gr.Checkbox(
                         label="torch.compile (requires Triton from experimental speedups; limited gain on Ampere; faster after warmup, slower first run, recompiles on resolution change)",
                         value=False,
@@ -461,7 +463,7 @@ def build_app() -> "gr.Blocks":
                     batch_cfg = gr.Number(label="Guidance", value=1.0)
                     batch_megapixels = gr.Number(label="Megapixels", value=1.0)
                     batch_seed = gr.Number(label="Seed", value=0, precision=0)
-                    batch_engine = gr.Dropdown(label="Engine", choices=ENGINE_CHOICES, value="default")
+                    batch_engine = gr.Dropdown(label="Engine", choices=ENGINE_CHOICES, value=DEFAULT_ENGINE_VALUE)
                     batch_compile = gr.Checkbox(
                         label="torch.compile (requires Triton from experimental speedups; limited gain on Ampere; faster after warmup, slower first run, recompiles on resolution change)",
                         value=False,
@@ -493,7 +495,7 @@ def build_app() -> "gr.Blocks":
                     t2i_steps = gr.Number(label="Steps", value=4, precision=0)
                     t2i_cfg = gr.Number(label="Guidance", value=1.0)
                     t2i_seed = gr.Number(label="Seed", value=0, precision=0)
-                    t2i_engine = gr.Dropdown(label="Engine", choices=ENGINE_CHOICES, value="default")
+                    t2i_engine = gr.Dropdown(label="Engine", choices=ENGINE_CHOICES, value=DEFAULT_ENGINE_VALUE)
                     t2i_compile = gr.Checkbox(
                         label="torch.compile (requires Triton from experimental speedups; limited gain on Ampere; faster after warmup, slower first run, recompiles on resolution change)",
                         value=False,

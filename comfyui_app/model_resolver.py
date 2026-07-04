@@ -38,6 +38,15 @@ class Candidate:
 
 MODEL_REGISTRY: dict[str, dict[str, list[Candidate]]] = {
     "diffusion": {
+        "int8": [
+            Candidate(
+                repo="Bedovyy/FLUX.2-klein-4B-INT8-Comfy",
+                path_regex=r"(^|/)flux-2-klein-4b_learned_int8mixed_tensorwise\.safetensors$",
+                dest_subdir="diffusion_models",
+                min_vram=0.0,
+                kind="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
+            )
+        ],
         "flux2_fp8": [
             Candidate(
                 repo="black-forest-labs/FLUX.2-klein-4b-fp8",
@@ -239,7 +248,7 @@ def resolve_models(
     vram_gb: float,
     token: str | None,
     prefer_gguf: bool = False,
-    engine: str = "default",
+    engine: str = "int8",
 ) -> dict[str, dict[str, object]]:
     if not token:
         raise ModelResolverError(
@@ -247,7 +256,7 @@ def resolve_models(
         )
 
     tier = select_tier(vram_gb)
-    diffusion_key = "nunchaku_int4" if engine == "nunchaku_int4" else tier.diffusion
+    diffusion_key = "nunchaku_int4" if engine == "nunchaku_int4" else ("int8" if engine == "int8" else tier.diffusion)
     if prefer_gguf and diffusion_key == "flux2_fp8":
         diffusion_key = "flux2_gguf_q4_k_m"
     text_encoder_key = tier.text_encoder
