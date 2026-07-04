@@ -47,7 +47,15 @@ def _diffusion_loader_node(diffusion_model: str, engine: str) -> dict[str, Any]:
 
 def _decode_node(use_tiled_decode: bool, decode_tile_size: int) -> tuple[str, dict[str, Any]]:
     if use_tiled_decode:
-        return "18", _node("VAEDecodeTiled", samples=_link("17"), vae=_link("3"), tile_size=decode_tile_size)
+        return "18", _node(
+            "VAEDecodeTiled",
+            samples=_link("17"),
+            vae=_link("3"),
+            tile_size=decode_tile_size,
+            overlap=64,
+            temporal_size=64,
+            temporal_overlap=8,
+        )
     return "18", _node("VAEDecode", samples=_link("17"), vae=_link("3"))
 
 
@@ -90,6 +98,7 @@ def build_edit_prompt(
             image=_link("6"),
             upscale_method="nearest-exact",
             megapixels=megapixels,
+            resolution_steps=1,
         ),
         "8": _node("GetImageSize", image=_link("7")),
         "9": _node("VAEEncode", pixels=_link("7"), vae=_link("3")),
@@ -217,6 +226,7 @@ def build_mrflow_t2i_prompt(
             image=_link("14"),
             upscale_method="lanczos",
             megapixels=target_megapixels,
+            resolution_steps=1,
         ),
         "16": _node("GetImageSize", image=_link("15")),
         "17": _node("VAEEncode", pixels=_link("15"), vae=_link("3")),
@@ -233,7 +243,21 @@ def build_mrflow_t2i_prompt(
             sigmas=_link("19", 1),
             latent_image=_link("17"),
         ),
-        "24": _node("VAEDecodeTiled" if use_tiled_decode else "VAEDecode", samples=_link("23"), vae=_link("3"), **({"tile_size": decode_tile_size} if use_tiled_decode else {})),
+        "24": _node(
+            "VAEDecodeTiled" if use_tiled_decode else "VAEDecode",
+            samples=_link("23"),
+            vae=_link("3"),
+            **(
+                {
+                    "tile_size": decode_tile_size,
+                    "overlap": 64,
+                    "temporal_size": 64,
+                    "temporal_overlap": 8,
+                }
+                if use_tiled_decode
+                else {}
+            ),
+        ),
         "25": _node("SaveImage", images=_link("24"), filename_prefix="Flux2-Klein-MrFlow"),
     }
     if use_torch_compile:
@@ -282,6 +306,7 @@ def build_mrflow_edit_prompt(
             image=_link("6"),
             upscale_method="nearest-exact",
             megapixels=low_megapixels,
+            resolution_steps=1,
         ),
         "8": _node("GetImageSize", image=_link("7")),
         "9": _node("VAEEncode", pixels=_link("7"), vae=_link("3")),
@@ -308,6 +333,7 @@ def build_mrflow_edit_prompt(
             image=_link("20"),
             upscale_method="lanczos",
             megapixels=target_megapixels,
+            resolution_steps=1,
         ),
         "22": _node("GetImageSize", image=_link("21")),
         "23": _node("VAEEncode", pixels=_link("21"), vae=_link("3")),
@@ -325,7 +351,21 @@ def build_mrflow_edit_prompt(
             latent_image=_link("23"),
         ),
     }
-    nodes["30"] = _node("VAEDecodeTiled" if use_tiled_decode else "VAEDecode", samples=_link("29"), vae=_link("3"), **({"tile_size": decode_tile_size} if use_tiled_decode else {}))
+    nodes["30"] = _node(
+        "VAEDecodeTiled" if use_tiled_decode else "VAEDecode",
+        samples=_link("29"),
+        vae=_link("3"),
+        **(
+            {
+                "tile_size": decode_tile_size,
+                "overlap": 64,
+                "temporal_size": 64,
+                "temporal_overlap": 8,
+            }
+            if use_tiled_decode
+            else {}
+        ),
+    )
     nodes["31"] = _node("SaveImage", images=_link("30"), filename_prefix="Flux2-Klein-MrFlow")
     if use_torch_compile:
         _apply_torch_compile(nodes)

@@ -54,7 +54,8 @@
         0
       ],
       "upscale_method": "nearest-exact",
-      "megapixels": 1.0
+      "megapixels": 1.0,
+      "resolution_steps": 1
     }
   },
   "8": {
@@ -199,7 +200,10 @@
         "3",
         0
       ],
-      "tile_size": 1024
+      "tile_size": 1024,
+      "overlap": 64,
+      "temporal_size": 64,
+      "temporal_overlap": 8
     }
   },
   "19": {

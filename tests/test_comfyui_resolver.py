@@ -50,8 +50,12 @@ def test_build_edit_prompt_injects_expected_values() -> None:
     assert prompt["4"]["inputs"]["text"] == "make this photo realistic"
     assert prompt["5"]["inputs"]["text"] == "blurry, cartoon"
     assert prompt["7"]["inputs"]["megapixels"] == 1.0
+    assert prompt["7"]["inputs"]["resolution_steps"] == 1
     assert prompt["13"]["inputs"]["steps"] == 4
     assert prompt["15"]["inputs"]["noise_seed"] == 123
+    assert prompt["18"]["inputs"]["overlap"] == 64
+    assert prompt["18"]["inputs"]["temporal_size"] == 64
+    assert prompt["18"]["inputs"]["temporal_overlap"] == 8
 
 
 def test_build_edit_prompt_switches_loader_for_gguf() -> None:
@@ -135,6 +139,30 @@ def test_build_t2i_prompt_omits_image_encoding_nodes() -> None:
     assert "VAEEncode" not in class_types
     assert "EmptyFlux2LatentImage" in class_types
     assert "SamplerCustomAdvanced" in class_types
+
+
+def test_build_t2i_prompt_sets_new_decode_inputs_when_tiled() -> None:
+    prompt = build_t2i_prompt(
+        diffusion_model="flux-2-klein-4b-fp8.safetensors",
+        text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
+        vae_model="full_encoder_small_decoder.safetensors",
+        prompt="a sunny portrait",
+        negative="blurry",
+        seed=0,
+        steps=4,
+        cfg=1.0,
+        width=1024,
+        height=1024,
+        batch_size=1,
+        use_tiled_decode=True,
+        decode_tile_size=1024,
+    )
+
+    decode_node_id = next(node_id for node_id, node in prompt.items() if node["class_type"] == "VAEDecodeTiled")
+    assert prompt[decode_node_id]["inputs"]["tile_size"] == 1024
+    assert prompt[decode_node_id]["inputs"]["overlap"] == 64
+    assert prompt[decode_node_id]["inputs"]["temporal_size"] == 64
+    assert prompt[decode_node_id]["inputs"]["temporal_overlap"] == 8
 
 
 def test_build_t2i_prompt_adds_torch_compile_node_when_requested() -> None:
