@@ -1,13 +1,13 @@
-# ai-image
+ï»¿# ai-image
 
 ComfyUI-based local image app for FLUX.2 Klein 4B on consumer NVIDIA GPUs.
 
 ## What this repo contains
 
-- `comfyui_app/` — the active app, workflow builders, resolver, and UI
-- `Install.bat` — first-time setup
-- `Launch.bat` — start ComfyUI and the Gradio UI
-- `Update.bat` — in-place update without rebuilding the Python environment
+- `comfyui_app/` - the active app, workflow builders, resolver, and UI
+- `Install.bat` - first-time setup
+- `Launch.bat` - start ComfyUI and the Gradio UI
+- `Update.bat` - in-place update without rebuilding the Python environment
 
 The old Hugging Face diffusers app has been removed from the repository.
 
@@ -43,6 +43,17 @@ Run `Launch.bat` and open the app at:
 
 ComfyUI itself listens on `127.0.0.1:8188`.
 
+## App tabs
+
+- **Image Edit** - upload an image, edit it with FLUX.2 Klein, and save the result.
+- **Video to Frames** - extract frames from a video, then optionally batch-edit the extracted frames.
+- **Batch Folder** - batch-edit a folder of images.
+- **Text-to-Image** - generate from scratch.
+- **Upscale** - upscale a single image or a folder of images with either RTX VSR or Real-ESRGAN.
+- **Video Upscale** - upscale a whole video and write an H.264/AAC `.mp4` output.
+
+Each tab has an output folder `Browse...` button, and the long-running tabs have a `Stop` button for cancellation.
+
 ## Model layout
 
 The resolver writes into the standard ComfyUI folders:
@@ -51,6 +62,45 @@ The resolver writes into the standard ComfyUI folders:
 - `ComfyUI/models/text_encoders/`
 - `ComfyUI/models/vae/`
 - `ComfyUI/models/upscale_models/`
+
+## Upscaling
+
+### RTX Video Super Resolution
+
+The NVIDIA RTX VSR path uses the `RTXVideoSuperResolution` node from the Comfy-Org RTX node package. It requires:
+
+- an NVIDIA RTX GPU
+- the `nvidia-vfx` runtime package
+- the `Comfy-Org/Nvidia_RTX_Nodes_ComfyUI` custom node
+
+The installer tries to add that support automatically, but it is best-effort. If the RTX runtime is unavailable, the app falls back to Real-ESRGAN x2+.
+
+### Real-ESRGAN fallback
+
+The fallback upscaler uses the core ComfyUI `UpscaleModelLoader` + `ImageUpscaleWithModel` path and the already-resolved `RealESRGAN_x2plus.pth` checkpoint in `ComfyUI/models/upscale_models/`.
+
+### Video output
+
+Video upscaling reassembles frames with `imageio-ffmpeg` and preserves the original audio track when present:
+
+- input: `.mp4` or `.mov`
+- output: `.mp4` with H.264 video
+- audio: copied back in when the source has an audio stream
+- no audio stream: the output stays video-only
+
+## Browse buttons and Stop
+
+The UI uses native folder pickers for folder fields. Clicking `Browse...` fills the current textbox value without blocking manual edits.
+
+Long-running tabs include a `Stop` button. It:
+
+1. sets the in-app cancel flag
+2. calls ComfyUI's `/interrupt` endpoint
+3. cancels the frontend event when Gradio supports it
+
+## Batch output behavior
+
+Batch jobs now write into a timestamped per-run subfolder under the chosen output folder, and the Batch / Upscale folder tabs stream results into a live gallery as each image completes.
 
 ## RTX 3070 / 8 GB default plan
 
@@ -78,7 +128,7 @@ Sources:
 
 - **SageAttention 2** is preferred and is auto-used via `--use-sage-attention` when available.
 - **Nunchaku INT4** is experimental but can be much faster. Use the `tonera/FLUX.2-klein-4B-Nunchaku` INT4 checkpoint and the experimental installer path if you want to try it.
-- **torch.compile** is available in the UI. It can help after warmup, but the first run is slower and resolution changes recompile.
+- **torch.compile** is available in the UI. It requires Triton on Windows, which is installed via the experimental speedups path (`--with-experimental-speedups`). The gain on Ampere is limited, but it can help after warmup. The first run is slower and resolution changes recompile.
 
 ## MrFlow staged sampling (experimental)
 
@@ -97,7 +147,7 @@ Defaults:
 - stage 1: 4 steps
 - refine: 1 step
 - refine denoise: 0.25
-- low-res size: 512×512 for a 1024×1024 target
+- low-res size: 512x512 for a 1024x1024 target
 
 Notes:
 
@@ -106,6 +156,10 @@ Notes:
 - It is off by default.
 
 The app auto-downloads `RealESRGAN_x2plus.pth` into `ComfyUI/models/upscale_models/` during the normal model refresh.
+
+## Dependencies
+
+The ComfyUI helper requirements include `imageio-ffmpeg` so the app can reassemble videos without relying on a system ffmpeg install.
 
 ## Working with the resolver
 

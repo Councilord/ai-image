@@ -162,6 +162,13 @@ class ComfyClient:
                     images.append(image)
         return images
 
+    def interrupt(self) -> None:
+        self._require_requests()
+        try:
+            self._session.post(f"{self.base_url}/interrupt", timeout=10)
+        except Exception:
+            logger.debug("ComfyUI interrupt request failed", exc_info=True)
+
     def _fetch_image(self, item: dict[str, object]) -> object | None:
         filename = item.get("filename")
         subfolder = item.get("subfolder", "")

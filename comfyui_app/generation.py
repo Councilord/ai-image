@@ -7,11 +7,24 @@ import time
 from pathlib import Path
 from typing import Protocol
 
+try:
+    from PIL import Image
+except Exception:  # pragma: no cover - optional dependency
+    Image = None  # type: ignore[assignment]
+
 from comfyui_app.comfy_client import ComfyClient
 from comfyui_app.config import COMFYUI_HOST, COMFYUI_PORT, get_hf_token
 from comfyui_app.model_resolver import ModelResolverError, download_models, load_resolved_manifest, resolve_models
 from comfyui_app.vram import detect_vram, select_tier
-from comfyui_app.workflow_builder import build_edit_prompt, build_mrflow_edit_prompt, build_mrflow_t2i_prompt, build_t2i_prompt
+from comfyui_app.workflow_builder import (
+    DEFAULT_UPSCALE_MODEL,
+    build_edit_prompt,
+    build_esrgan_upscale_prompt,
+    build_mrflow_edit_prompt,
+    build_mrflow_t2i_prompt,
+    build_rtx_upscale_prompt,
+    build_t2i_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +87,14 @@ def _save_first_image(images: list[_ImageLike], output_dir: Path, output_name: s
 def _retryable_oom(message: str) -> bool:
     lowered = message.lower()
     return "out of memory" in lowered or "cuda out of memory" in lowered or "oom" in lowered
+
+
+def _image_dimensions(image_path: Path) -> tuple[int, int]:
+    if Image is None:
+        raise ModelResolverError("Pillow is required to read image dimensions for upscaling.")
+    with Image.open(image_path) as image:
+        width, height = image.size
+    return width, height
 
 
 def _resolved_filename_map(vram_gb: float, prefer_gguf: bool, engine: str) -> dict[str, str]:
@@ -328,3 +349,58 @@ def run_t2i(
             prompt_dict = builder(**builder_kwargs)
             return _run_prompt(client, prompt_dict, target_dir, output_name, timeout)
         raise
+
+
+def run_upscale(
+    input_image_path: str | Path,
+    output_dir: str | Path,
+    *,
+    upscaler: str = "rtx",
+    scale: float = 2.0,
+    resize_type: str = "scale by multiplier",
+    quality: str = "ULTRA",
+    target_width: int | None = None,
+    target_height: int | None = None,
+    timeout: float = 600.0,
+    client: ComfyClient | None = None,
+) -> GenerationResult:
+    client = client or ComfyClient(COMFYUI_HOST, COMFYUI_PORT)
+    input_path = Path(input_image_path)
+    target_dir = Path(output_dir)
+    uploaded_name = client.upload_image(input_path)
+    if resize_type == "scale by multiplier" and (target_width is None or target_height is None):
+        source_width, source_height = _image_dimensions(input_path)
+        target_width = max(1, int(round(source_width * scale)))
+        target_height = max(1, int(round(source_height * scale)))
+    if upscaler == "rtx":
+        if resize_type == "target dimensions":
+            prompt_dict = build_rtx_upscale_prompt(
+                image=uploaded_name,
+                resize_type=resize_type,
+                width=target_width,
+                height=target_height,
+                quality=quality,
+            )
+        else:
+            prompt_dict = build_rtx_upscale_prompt(
+                image=uploaded_name,
+                resize_type=resize_type,
+                scale=scale,
+                quality=quality,
+            )
+    elif upscaler == "esrgan":
+        prompt_dict = build_esrgan_upscale_prompt(
+            image=uploaded_name,
+            upscale_model_name=DEFAULT_UPSCALE_MODEL,
+            resize_type="target dimensions" if target_width is not None and target_height is not None else resize_type,
+            target_width=target_width,
+            target_height=target_height,
+        )
+    else:
+        raise ModelResolverError(f"Unknown upscaler: {upscaler}")
+
+    output_name = _output_name(input_path, "upscale", 0)
+    try:
+        return _run_prompt(client, prompt_dict, target_dir, output_name, timeout)
+    except Exception as exc:
+        raise exc

@@ -14,6 +14,7 @@ NUNCHAKU_DIT_LOADER_CLASS = "NunchakuFluxDiTLoader"
 UPSCALE_MODEL_LOADER_CLASS = "UpscaleModelLoader"
 IMAGE_UPSCALE_WITH_MODEL_CLASS = "ImageUpscaleWithModel"
 SPLIT_SIGMAS_DENOISE_CLASS = "SplitSigmasDenoise"
+RTX_VIDEO_SUPER_RESOLUTION_CLASS = "RTXVideoSuperResolution"
 DEFAULT_UPSCALE_MODEL = "RealESRGAN_x2plus.pth"
 
 
@@ -369,6 +370,65 @@ def build_mrflow_edit_prompt(
     nodes["31"] = _node("SaveImage", images=_link("30"), filename_prefix="Flux2-Klein-MrFlow")
     if use_torch_compile:
         _apply_torch_compile(nodes)
+    return nodes
+
+
+def build_rtx_upscale_prompt(
+    *,
+    image: str,
+    resize_type: str = "scale by multiplier",
+    scale: float = 2.0,
+    width: int | None = None,
+    height: int | None = None,
+    quality: str = "ULTRA",
+    filename_prefix: str = "Upscaled",
+) -> dict[str, Any]:
+    inputs: dict[str, Any] = {"images": _link("1"), "resize_type": resize_type, "quality": quality}
+    if resize_type == "target dimensions":
+        if width is None or height is None:
+            raise ValueError("width and height are required when resize_type is 'target dimensions'.")
+        inputs["width"] = width
+        inputs["height"] = height
+    else:
+        inputs["scale"] = scale
+    return {
+        "1": _node("LoadImage", image=image),
+        "2": _node(RTX_VIDEO_SUPER_RESOLUTION_CLASS, **inputs),
+        "3": _node("SaveImage", images=_link("2"), filename_prefix=filename_prefix),
+    }
+
+
+def build_esrgan_upscale_prompt(
+    *,
+    image: str,
+    upscale_model_name: str = DEFAULT_UPSCALE_MODEL,
+    resize_type: str = "scale by multiplier",
+    scale: float = 2.0,
+    target_width: int | None = None,
+    target_height: int | None = None,
+    filename_prefix: str = "Upscaled",
+) -> dict[str, Any]:
+    nodes: dict[str, Any] = {
+        "1": _node("LoadImage", image=image),
+        "2": _node(UPSCALE_MODEL_LOADER_CLASS, model_name=upscale_model_name),
+        "3": _node(IMAGE_UPSCALE_WITH_MODEL_CLASS, upscale_model=_link("2"), image=_link("1")),
+    }
+    output_link = _link("3")
+    if resize_type == "target dimensions":
+        if target_width is None or target_height is None:
+            raise ValueError("target_width and target_height are required when resize_type is 'target dimensions'.")
+        nodes["4"] = _node(
+            "ImageScaleToTotalPixels",
+            image=_link("3"),
+            upscale_method="lanczos",
+            megapixels=(target_width * target_height) / 1_048_576,
+            resolution_steps=1,
+        )
+        output_link = _link("4")
+    elif scale != 2.0:
+        # Keep the API symmetrical with the RTX path; the Real-ESRGAN model itself is 2x.
+        pass
+    nodes[str(len(nodes) + 1)] = _node("SaveImage", images=output_link, filename_prefix=filename_prefix)
     return nodes
 
 

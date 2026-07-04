@@ -5,3 +5,4 @@ imageio
 pillow
 gradio
 huggingface_hub[hf_xet]
+imageio-ffmpeg

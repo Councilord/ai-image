@@ -99,6 +99,34 @@ def _install_experimental_speedups() -> None:
         print(f"WARNING: The Nunchaku package install did not finish: {exc}")
         print("If you want to try the experimental path later, follow the Nunchaku releases page.")
 
+    try:
+        print("Trying to install the Windows Triton build for torch.compile...")
+        _run([sys.executable, "-m", "pip", "install", "--upgrade", "triton-windows"])
+    except Exception as exc:
+        print(f"WARNING: The Triton install did not finish: {exc}")
+        print("torch.compile requires Triton on Windows, so it will otherwise error.")
+
+
+def _install_rtx_vsr_support() -> None:
+    print("Trying to add the RTX video super-resolution node...")
+    try:
+        custom_nodes = COMFYUI_DIR / "custom_nodes"
+        custom_nodes.mkdir(parents=True, exist_ok=True)
+        _install_custom_node(
+            "https://github.com/Comfy-Org/Nvidia_RTX_Nodes_ComfyUI.git",
+            custom_nodes / "Nvidia_RTX_Nodes_ComfyUI",
+        )
+    except Exception as exc:
+        print(f"WARNING: The RTX VSR custom node could not be prepared: {exc}")
+        print("The app will fall back to Real-ESRGAN for upscaling.")
+
+    try:
+        print("Trying to install the nvidia-vfx package...")
+        _run([sys.executable, "-m", "pip", "install", "--upgrade", "nvidia-vfx"])
+    except Exception as exc:
+        print(f"WARNING: The nvidia-vfx install did not finish: {exc}")
+        print("RTX video super-resolution will not be available, so the app will use Real-ESRGAN.")
+
 
 def _refresh_models() -> None:
     token = _get_token_from_user()
@@ -132,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
             custom_nodes.mkdir(parents=True, exist_ok=True)
             _install_custom_node("https://github.com/city96/ComfyUI-GGUF.git", custom_nodes / "ComfyUI-GGUF")
             _install_custom_node("https://github.com/ltdrdata/ComfyUI-Manager.git", custom_nodes / "ComfyUI-Manager")
+            _install_rtx_vsr_support()
             if args.with_experimental_speedups:
                 _install_experimental_speedups()
         _refresh_models()
