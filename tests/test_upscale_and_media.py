@@ -18,17 +18,19 @@ def test_build_rtx_upscale_prompt_serializes_flat_inputs() -> None:
     assert prompt["2"]["inputs"] == {
         "images": ["1", 0],
         "resize_type": "scale by multiplier",
-        "scale": 2.0,
+        "resize_type.scale": 2.0,
         "quality": "ULTRA",
     }
 
 
-def test_build_rtx_upscale_prompt_includes_required_scale_for_target_dimensions() -> None:
+def test_build_rtx_upscale_prompt_nests_target_dimensions() -> None:
     prompt = build_rtx_upscale_prompt(image="input.png", resize_type="target dimensions", width=1920, height=1080)
 
-    assert prompt["2"]["inputs"]["scale"] == 2.0
-    assert prompt["2"]["inputs"]["width"] == 1920
-    assert prompt["2"]["inputs"]["height"] == 1080
+    assert prompt["2"]["inputs"]["resize_type"] == "target dimensions"
+    assert prompt["2"]["inputs"]["resize_type.width"] == 1920
+    assert prompt["2"]["inputs"]["resize_type.height"] == 1080
+    assert "resize_type.scale" not in prompt["2"]["inputs"]
+    assert "scale" not in prompt["2"]["inputs"]
 
 
 def test_build_esrgan_upscale_prompt_uses_core_upscale_nodes() -> None:

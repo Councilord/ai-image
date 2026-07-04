@@ -377,7 +377,17 @@ def _batch_folder_stream(
     use_torch_compile: bool,
     mrflow: bool,
 ):
+    client = ComfyClient(COMFYUI_HOST, COMFYUI_PORT)
+    client_ready = False
+
+    def ensure_client_ready() -> None:
+        nonlocal client_ready
+        if not client_ready:
+            client.wait_until_up()
+            client_ready = True
+
     def gen_fn(image_path: Path, prompt_text: str, negative_text: str, run_dir: Path) -> GenerationResult:
+        ensure_client_ready()
         return run_edit(
             image_path,
             prompt_text,
@@ -390,6 +400,7 @@ def _batch_folder_stream(
             engine=engine,
             use_torch_compile=bool(use_torch_compile),
             mrflow=bool(mrflow),
+            client=client,
         )
 
     yield from _yield_folder_updates(iter_process_folder(input_dir, output_dir, prompt, negative, gen_fn))
@@ -402,8 +413,18 @@ def _upscale_folder_stream(
     scale: float,
     quality: str,
 ):
+    client = ComfyClient(COMFYUI_HOST, COMFYUI_PORT)
+    client_ready = False
+
+    def ensure_client_ready() -> None:
+        nonlocal client_ready
+        if not client_ready:
+            client.wait_until_up()
+            client_ready = True
+
     def gen_fn(image_path: Path, prompt_text: str, negative_text: str, run_dir: Path) -> GenerationResult:
-        return run_upscale(image_path, run_dir, upscaler=upscaler, scale=float(scale), quality=quality)
+        ensure_client_ready()
+        return run_upscale(image_path, run_dir, upscaler=upscaler, scale=float(scale), quality=quality, client=client)
 
     yield from _yield_folder_updates(iter_process_folder(input_dir, output_dir, "", "", gen_fn))
 
@@ -431,7 +452,17 @@ def _edit_frames_handler(
     use_torch_compile: bool,
     mrflow: bool,
 ) -> tuple[str]:
+    client = ComfyClient(COMFYUI_HOST, COMFYUI_PORT)
+    client_ready = False
+
+    def ensure_client_ready() -> None:
+        nonlocal client_ready
+        if not client_ready:
+            client.wait_until_up()
+            client_ready = True
+
     def gen_fn(image_path: Path, prompt_text: str, negative_text: str, run_dir: Path) -> GenerationResult:
+        ensure_client_ready()
         return run_edit(
             image_path,
             prompt_text,
@@ -444,6 +475,7 @@ def _edit_frames_handler(
             engine=engine,
             use_torch_compile=bool(use_torch_compile),
             mrflow=bool(mrflow),
+            client=client,
         )
 
     try:

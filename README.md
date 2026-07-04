@@ -188,7 +188,7 @@ What it does:
 
 Requirements:
 
-- base model: `vistralis/FLUX.2-klein-base-4b-int8`
+- base model: `vistralis/FLUX.2-klein-base-4b-INT8-transformer`
 - optional fp8 fallback: `black-forest-labs/FLUX.2-klein-base-4b-fp8`
 - depth LoRA: `thedeoxen/refcontrol-FLUX.2-klein-4B-reference-depth-lora`
 - custom node: `Fannovel16/comfyui_controlnet_aux`

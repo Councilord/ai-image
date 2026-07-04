@@ -178,7 +178,7 @@ def test_build_depth_refcontrol_edit_prompt_uses_depth_assets() -> None:
 def test_resolve_depth_control_models_supports_int8_base(monkeypatch) -> None:
     trees = {
         "black-forest-labs/FLUX.2-klein-base-4b-fp8": _tree("flux-2-klein-base-4b-fp8.safetensors"),
-        "vistralis/FLUX.2-klein-base-4b-int8": _tree("flux-2-klein-base-4b-int8.safetensors"),
+        "vistralis/FLUX.2-klein-base-4b-INT8-transformer": _tree("flux-2-klein-base-4b-int8.safetensors"),
         "thedeoxen/refcontrol-FLUX.2-klein-4B-reference-depth-lora": _tree("flux2_klein_4b_refcontrol_depth.safetensors"),
     }
 

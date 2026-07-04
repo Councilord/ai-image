@@ -464,12 +464,14 @@ def build_rtx_upscale_prompt(
     quality: str = "ULTRA",
     filename_prefix: str = "Upscaled",
 ) -> dict[str, Any]:
-    inputs: dict[str, Any] = {"images": _link("1"), "resize_type": resize_type, "quality": quality, "scale": scale}
+    inputs: dict[str, Any] = {"images": _link("1"), "resize_type": resize_type, "quality": quality}
+    if resize_type == "scale by multiplier":
+        inputs["resize_type.scale"] = scale
     if resize_type == "target dimensions":
         if width is None or height is None:
             raise ValueError("width and height are required when resize_type is 'target dimensions'.")
-        inputs["width"] = width
-        inputs["height"] = height
+        inputs["resize_type.width"] = width
+        inputs["resize_type.height"] = height
     return {
         "1": _node("LoadImage", image=image),
         "2": _node(RTX_VIDEO_SUPER_RESOLUTION_CLASS, **inputs),
