@@ -408,8 +408,12 @@ def build_app() -> "gr.Blocks":
         with gr.Tab("Image Edit"):
             with gr.Row():
                 with gr.Column():
-                    edit_image = gr.Image(label="Depth source image", type="filepath")
-                    edit_reference = gr.Image(label="Reference / identity image (optional)", type="filepath")
+                    edit_image = gr.Image(label="Input image", type="filepath")
+                    edit_reference = gr.Image(label="Identity image (optional)", type="filepath", visible=False)
+                    edit_depth_note = gr.Markdown(
+                        "With Pose/Shape lock, the output is locked to the input image's pose/shape (depth is auto-extracted from it). Leave Identity empty to keep the input's own identity, or add an identity image to borrow a different subject's identity while keeping the input's pose/shape.",
+                        visible=False,
+                    )
                     edit_prompt = gr.Textbox(label="Prompt", lines=4)
                     edit_negative = gr.Textbox(label="Negative prompt", lines=3)
                 with gr.Column():
@@ -439,6 +443,11 @@ def build_app() -> "gr.Blocks":
                 fn=_edit_handler,
                 inputs=[edit_image, edit_reference, edit_prompt, edit_negative, edit_output, edit_steps, edit_cfg, edit_megapixels, edit_seed, edit_engine, edit_compile, edit_mrflow, edit_depth_lock],
                 outputs=[edit_result, edit_status],
+            )
+            edit_depth_lock.change(
+                fn=lambda enabled: (gr.update(visible=bool(enabled)), gr.update(visible=bool(enabled))),
+                inputs=[edit_depth_lock],
+                outputs=[edit_reference, edit_depth_note],
             )
             edit_stop.click(fn=_stop_current_job, outputs=edit_status, cancels=[edit_run])
 
