@@ -1,127 +1,65 @@
 @echo off
 setlocal EnableExtensions
 
-REM ============================================
-REM Ultra Fast Image Gen Launcher (Windows)
-REM ============================================
-REM Version: 4.0 - Quick launcher (no verification)
-REM Run Verify.bat first to check your setup
-REM ============================================
-
-echo.
 echo ============================================
-echo        Ultra Fast Image Gen (Windows)
+echo         ComfyUI Local Image App Launcher
 echo ============================================
 echo.
 
-REM Change to script directory for consistent path handling
 cd /d "%~dp0" 2>nul
 if errorlevel 1 (
-    echo ERROR: Failed to change to script directory.
-    goto :error_exit
+  echo ERROR: Could not change to the repository folder.
+  exit /b 1
 )
 
-set "PYTHON_EXE=%CD%\venv\Scripts\python.exe"
-if not exist "%PYTHON_EXE%" (
-    echo ERROR: Virtual environment Python was not found at:
-    echo   %PYTHON_EXE%
-    echo Run Install.bat to create the environment, then Verify.bat if startup still fails.
-    goto :error_exit
+if not exist "ComfyUI\main.py" (
+  echo ERROR: ComfyUI was not found.
+  echo Run Install.bat first.
+  exit /b 1
 )
 
-REM ============================================
-REM ENVIRONMENT CONFIGURATION
-REM ============================================
-
-echo.
-echo [1/2] Configuring fast launch environment...
-
-REM Create cache directories for persistent torch.compile caching
-if not exist "%CD%\cache\torch_inductor" mkdir "%CD%\cache\torch_inductor"
-if not exist "%CD%\cache\triton" mkdir "%CD%\cache\triton"
-
-REM PyTorch optimizations
-set "TORCHINDUCTOR_MAX_AUTOTUNE=1"
-set "TORCHINDUCTOR_FREEZING=1"
-set "TORCHINDUCTOR_CACHE_DIR=%CD%\cache\torch_inductor"
-set "TORCHINDUCTOR_FX_GRAPH_CACHE=1"
-set "TORCHINDUCTOR_AUTOTUNE_CACHE=1"
-set "TORCHINDUCTOR_FORCE_DISABLE_CACHES=0"
-set "CUDA_DEVICE_ORDER=PCI_BUS_ID"
-set "PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256,roundup_power2_divisions:32"
-set "PYTORCH_ALLOC_CONF=%PYTORCH_CUDA_ALLOC_CONF%"
-if "%UFIG_OPTIMIZATION_PROFILE%"=="" set "UFIG_OPTIMIZATION_PROFILE=max_speed"
-if "%UFIG_ENABLE_OPTIONAL_ACCELERATORS%"=="" set "UFIG_ENABLE_OPTIONAL_ACCELERATORS=0"
-REM SDNQ Triton optimizations now auto-detected via triton-windows package
-REM To force-disable: set "SDNQ_USE_TORCH_COMPILE=0" and set "SDNQ_USE_TRITON_MM=0"
-
-REM HuggingFace optimizations
-set "HF_HUB_DISABLE_PROGRESS_BARS=0"
-set "HF_HUB_ENABLE_HF_TRANSFER=1"
-set "HF_HUB_DISABLE_SYMLINKS_WARNING=1"
-
-REM Fast-launch flags: trust verified installs and defer heavyweight startup checks.
-set "SKIP_DEPENDENCY_CHECK=1"
-set "UFIG_STARTUP_MODEL_PREFLIGHT=0"
-set "UFIG_OPEN_BROWSER=1"
-set "UFIG_GRADIO_PORT=7860"
-
-echo Environment configuration complete.
-
-REM ============================================
-REM LAUNCH APPLICATION
-REM ============================================
-
-echo.
-echo [2/2] Starting Ultra Fast Image Gen...
-
-echo.
-echo ============================================
-echo Starting Gradio UI...
-echo Local URL: http://localhost:%UFIG_GRADIO_PORT%
-echo ^(Press Ctrl+C to stop the server^)
-echo ============================================
-echo.
-
-for /f "tokens=5" %%P in ('netstat -ano -p tcp ^| findstr /R /C:":%UFIG_GRADIO_PORT% .*LISTENING"') do (
-    if not "%%P"=="" taskkill /F /PID %%P >nul 2>&1
+if not exist "venv\Scripts\python.exe" (
+  echo ERROR: The virtual environment was not found.
+  echo Run Install.bat first.
+  exit /b 1
 )
 
-REM Start the application
-echo Starting Python application...
-"%PYTHON_EXE%" app.py
-set APP_EXIT_CODE=%errorlevel%
-
-if %APP_EXIT_CODE% neq 0 (
-    echo.
-    echo ERROR: Application exited with code %APP_EXIT_CODE%
-    echo Check the output above for details. Run Verify.bat if this keeps failing.
-    goto :error_exit
+call "venv\Scripts\activate.bat"
+if errorlevel 1 (
+  echo ERROR: Could not activate the virtual environment.
+  exit /b 1
 )
 
-echo.
-echo Application exited normally.
-goto :success_exit
+set "COMFYUI_HOST=127.0.0.1"
+set "COMFYUI_PORT=8188"
+set "COMFYUI_UI_HOST=127.0.0.1"
+set "COMFYUI_UI_PORT=7861"
+set "EXTRA_FLAGS="
+for /f "usebackq delims=" %%A in (`python -c "from comfyui_app.vram import detect_vram, select_tier; gb, _, _ = detect_vram(); print(' '.join(select_tier(gb).extra_launch_flags))"`) do set "EXTRA_FLAGS=%%A"
+set "SAGE_FLAG="
+for /f "usebackq delims=" %%A in (`python -c "import sageattention; print('--use-sage-attention')" 2^>nul`) do set "SAGE_FLAG=%%A"
 
-REM ============================================
-REM ERROR HANDLING
-REM ============================================
+REM RTX 3070 / Ampere: scope --fast to fp16_accumulation (real Ampere speedup);
+REM fp8_matrix_mult is a no-op on Ampere. --reserve-vram leaves headroom for the
+REM Windows display to avoid OOM/offload stalls. --fast-disk speeds offload on NVMe.
+echo Starting ComfyUI...
+start "ComfyUI" /b python "ComfyUI\main.py" --listen %COMFYUI_HOST% --port %COMFYUI_PORT% --fast fp16_accumulation --reserve-vram 0.8 --fast-disk %SAGE_FLAG% %EXTRA_FLAGS%
 
-:error_exit
-echo.
-echo ============================================
-echo              LAUNCH FAILED
-echo ============================================
-echo Please run Verify.bat to check your setup.
-echo.
-pause
-endlocal
-exit /b 1
+echo Waiting for ComfyUI to become ready...
+python -c "from comfyui_app.comfy_client import ComfyClient; from comfyui_app.config import COMFYUI_HOST, COMFYUI_PORT; ComfyClient(COMFYUI_HOST, COMFYUI_PORT).wait_until_up(timeout=180)"
+if errorlevel 1 (
+  echo ERROR: ComfyUI did not start.
+  exit /b 1
+)
 
-REM ============================================
-REM SUCCESS HANDLING
-REM ============================================
+echo Launching the local image app...
+python -m comfyui_app.app
+set "APP_EXIT=%errorlevel%"
 
-:success_exit
+if not "%APP_EXIT%"=="0" (
+  echo ERROR: The app exited with code %APP_EXIT%.
+  exit /b %APP_EXIT%
+)
+
 endlocal
 exit /b 0

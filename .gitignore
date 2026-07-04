@@ -34,6 +34,7 @@ output/
 logs/
 temp/
 models/
+ComfyUI/
 loras/
 user_state/
 *.incomplete
