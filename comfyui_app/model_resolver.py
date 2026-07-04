@@ -352,7 +352,6 @@ def download_models(
                 filename=remote_path,
                 token=token,
                 local_dir=str(dest_dir),
-                local_dir_use_symlinks=False,
             )
         )
         if downloaded_path.name != local_filename:
