@@ -116,11 +116,11 @@ MODEL_REGISTRY: dict[str, dict[str, list[Candidate]]] = {
         ],
         "base_int8": [
             Candidate(
-                repo="vistralis/FLUX.2-klein-base-4b-INT8-transformer",
-                path_regex=r"(^|/)flux-2-klein-base-4b-int8\.safetensors$",
+                repo="unsloth/FLUX.2-klein-base-4B-GGUF",
+                path_regex=r"(^|/)flux-2-klein-base-4b-Q8_0\.gguf$",
                 dest_subdir="diffusion_models",
                 min_vram=0.0,
-                kind="flux-2-klein-base-4b-int8.safetensors",
+                kind="flux-2-klein-base-4b-Q8_0.gguf",
             )
         ],
         "refcontrol_depth_lora": [

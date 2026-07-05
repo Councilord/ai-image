@@ -188,7 +188,7 @@ What it does:
 
 Requirements:
 
-- base model: `vistralis/FLUX.2-klein-base-4b-INT8-transformer`
+- base model: `unsloth/FLUX.2-klein-base-4B-GGUF` (`flux-2-klein-base-4b-Q8_0.gguf`)
 - optional fp8 fallback: `black-forest-labs/FLUX.2-klein-base-4b-fp8`
 - depth LoRA: `thedeoxen/refcontrol-FLUX.2-klein-4B-reference-depth-lora`
 - custom node: `Fannovel16/comfyui_controlnet_aux`
@@ -203,7 +203,7 @@ Notes:
 
 - Trigger word: `refcontrol`
 - This path uses the undistilled base model, so it is slower than the normal 4-step edit path.
-- The INT8 base is the default here; on Ampere it uses native INT8 tensor cores instead of emulated fp8.
+- The 8-bit Q8_0 GGUF base is the default here and loads through ComfyUI-GGUF; on Ampere it should still run efficiently while avoiding the raw safetensors/ModelOpt path.
 - The fp8 base remains available as an experimental fallback if you want to compare quality.
 - Expect roughly a ~20 step workflow and about a 5x slowdown versus the distilled edit path.
 - For FLUX.2 Klein 4B, only the **depth** lock mode is available here.

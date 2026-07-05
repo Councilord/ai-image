@@ -404,7 +404,7 @@ def build_depth_refcontrol_edit_prompt(
 ) -> dict[str, Any]:
     positive_prompt = _ensure_refcontrol_prompt(prompt)
     nodes: dict[str, Any] = {
-        "1": _node("UNETLoader", unet_name=diffusion_model, weight_dtype="default"),
+        "1": _loader_node(diffusion_model),
         "2": _node("CLIPLoader", clip_name=text_encoder_model, type="flux2", device="default"),
         "3": _node("VAELoader", vae_name=vae_model),
         "4": _node(LORA_LOADER_MODEL_ONLY_CLASS, model=_link("1"), lora_name=lora_model_name, strength_model=lora_strength),
