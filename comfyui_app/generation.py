@@ -304,6 +304,7 @@ def run_t2i(
     use_tiled_decode: bool | None = None,
     timeout: float = 600.0,
     prefer_gguf: bool = False,
+    use_teacache: bool = False,
     engine: str = "int8",
     use_torch_compile: bool = False,
     mrflow: bool = False,
@@ -342,6 +343,7 @@ def run_t2i(
             batch_size=batch_size,
             use_tiled_decode=tier.use_tiled_decode if use_tiled_decode is None else use_tiled_decode,
             decode_tile_size=decode_tile_size,
+            use_teacache=use_teacache,
             engine=engine,
             use_torch_compile=use_torch_compile,
         )
@@ -385,6 +387,7 @@ def run_t2i(
                 "batch_size": batch_size,
                 "use_tiled_decode": tier.use_tiled_decode if use_tiled_decode is None else use_tiled_decode,
                 "decode_tile_size": decode_tile_size,
+                "use_teacache": use_teacache,
                 "engine": engine,
                 "use_torch_compile": use_torch_compile,
             }
@@ -472,6 +475,7 @@ def run_depth_edit(
     lora_strength: float = 1.0,
     megapixels: float = 1.0,
     timeout: float = 600.0,
+    use_teacache: bool = False,
     client: ComfyClient | None = None,
 ) -> GenerationResult:
     client = client or ComfyClient(COMFYUI_HOST, COMFYUI_PORT)
@@ -497,6 +501,7 @@ def run_depth_edit(
         cfg=cfg,
         lora_strength=lora_strength,
         megapixels=megapixels,
+        use_teacache=use_teacache,
     )
     output_name = _output_name(depth_source_path, "depth_edit", seed)
     client.wait_until_up(timeout=timeout)

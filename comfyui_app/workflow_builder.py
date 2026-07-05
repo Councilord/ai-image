@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from comfyui_app.config import WORKFLOWS_DIR
+from comfyui_app.config import COMFYUI_DIR, WORKFLOWS_DIR
 
 
 TORCH_COMPILE_NODE_CLASS = "TorchCompileModel"
@@ -17,6 +17,13 @@ DEPTH_ANYTHING_V2_PREPROCESSOR_CLASS = "DepthAnythingV2Preprocessor"
 LORA_LOADER_MODEL_ONLY_CLASS = "LoraLoaderModelOnly"
 REFERENCE_LATENT_CLASS = "ReferenceLatent"
 REFCONTROL_TRIGGER = "refcontrol"
+TEACACHE_NODE_CLASS = "TeaCache"
+TEACACHE_CUSTOM_NODE_DIR = COMFYUI_DIR / "custom_nodes" / "ComfyUI-TeaCache"
+TEACACHE_MODEL_TYPE = "flux"
+TEACACHE_REL_L1_THRESH = 0.4
+TEACACHE_START_PERCENT = 0.0
+TEACACHE_END_PERCENT = 1.0
+TEACACHE_CACHE_DEVICE = "cpu"
 UPSCALE_MODEL_LOADER_CLASS = "UpscaleModelLoader"
 IMAGE_UPSCALE_WITH_MODEL_CLASS = "ImageUpscaleWithModel"
 SPLIT_SIGMAS_DENOISE_CLASS = "SplitSigmasDenoise"
@@ -36,6 +43,30 @@ def _loader_node(diffusion_model: str) -> dict[str, Any]:
     if diffusion_model.lower().endswith(".gguf"):
         return _node("UnetLoaderGGUF", unet_name=diffusion_model)
     return _node("UNETLoader", unet_name=diffusion_model, weight_dtype="default")
+
+
+def _teacache_available() -> bool:
+    return TEACACHE_CUSTOM_NODE_DIR.exists()
+
+
+def _apply_teacache(nodes: dict[str, Any], source_model_link: list[Any], *, model_type: str = TEACACHE_MODEL_TYPE) -> list[Any]:
+    if not _teacache_available():
+        return source_model_link
+    node_id = str(max(int(node_id) for node_id in nodes.keys() if node_id.isdigit()) + 1)
+    nodes[node_id] = _node(
+        TEACACHE_NODE_CLASS,
+        model=source_model_link,
+        model_type=model_type,
+        rel_l1_thresh=TEACACHE_REL_L1_THRESH,
+        start_percent=TEACACHE_START_PERCENT,
+        end_percent=TEACACHE_END_PERCENT,
+        cache_device=TEACACHE_CACHE_DEVICE,
+    )
+    tea_link = _link(node_id)
+    for node in nodes.values():
+        if isinstance(node, dict) and node.get("class_type") == "CFGGuider":
+            node["inputs"]["model"] = tea_link
+    return tea_link
 
 
 def _diffusion_loader_node(diffusion_model: str, engine: str) -> dict[str, Any]:
@@ -66,9 +97,9 @@ def _decode_node(use_tiled_decode: bool, decode_tile_size: int) -> tuple[str, di
     return "18", _node("VAEDecode", samples=_link("17"), vae=_link("3"))
 
 
-def _apply_torch_compile(nodes: dict[str, Any]) -> None:
+def _apply_torch_compile(nodes: dict[str, Any], model_link: list[Any] | None = None) -> None:
     compile_id = str(max(int(node_id) for node_id in nodes.keys() if node_id.isdigit()) + 1)
-    nodes[compile_id] = _node(TORCH_COMPILE_NODE_CLASS, model=_link("1"), backend="inductor")
+    nodes[compile_id] = _node(TORCH_COMPILE_NODE_CLASS, model=model_link or _link("1"), backend="inductor")
     for node in nodes.values():
         if isinstance(node, dict) and node.get("class_type") == "CFGGuider":
             node["inputs"]["model"] = _link(compile_id)
@@ -129,7 +160,7 @@ def build_edit_prompt(
     nodes[decode_id] = decode_node
     nodes["19"] = _node("SaveImage", images=_link(decode_id), filename_prefix="Flux2-Klein")
     if use_torch_compile:
-        _apply_torch_compile(nodes)
+        _apply_torch_compile(nodes, model_link)
     return nodes
 
 
@@ -148,6 +179,7 @@ def build_t2i_prompt(
     batch_size: int,
     use_tiled_decode: bool,
     decode_tile_size: int,
+    use_teacache: bool = False,
     engine: str = "default",
     use_torch_compile: bool = False,
 ) -> dict[str, Any]:
@@ -175,8 +207,11 @@ def build_t2i_prompt(
     decode_id, decode_node = _decode_node(use_tiled_decode, decode_tile_size)
     nodes[decode_id] = decode_node
     nodes["12"] = _node("SaveImage", images=_link(decode_id), filename_prefix="Flux2-Klein")
+    if use_teacache:
+        model_link = _apply_teacache(nodes, model_link)
+        nodes["10"]["inputs"]["model"] = model_link
     if use_torch_compile:
-        _apply_torch_compile(nodes)
+        _apply_torch_compile(nodes, model_link)
     return nodes
 
 
@@ -201,6 +236,7 @@ def build_mrflow_t2i_prompt(
     use_tiled_decode: bool,
     decode_tile_size: int,
     steps: int | None = None,
+    use_teacache: bool = False,
     engine: str = "default",
     use_torch_compile: bool = False,
 ) -> dict[str, Any]:
@@ -268,7 +304,7 @@ def build_mrflow_t2i_prompt(
         "25": _node("SaveImage", images=_link("24"), filename_prefix="Flux2-Klein-MrFlow"),
     }
     if use_torch_compile:
-        _apply_torch_compile(nodes)
+        _apply_torch_compile(nodes, model_link)
     return nodes
 
 
@@ -375,7 +411,7 @@ def build_mrflow_edit_prompt(
     )
     nodes["31"] = _node("SaveImage", images=_link("30"), filename_prefix="Flux2-Klein-MrFlow")
     if use_torch_compile:
-        _apply_torch_compile(nodes)
+        _apply_torch_compile(nodes, model_link)
     return nodes
 
 
@@ -401,8 +437,10 @@ def build_depth_refcontrol_edit_prompt(
     cfg: float = 5.0,
     lora_strength: float = 1.0,
     megapixels: float = 1.0,
+    use_teacache: bool = False,
 ) -> dict[str, Any]:
     positive_prompt = _ensure_refcontrol_prompt(prompt)
+    model_link = _link("4")
     nodes: dict[str, Any] = {
         "1": _loader_node(diffusion_model),
         "2": _node("CLIPLoader", clip_name=text_encoder_model, type="flux2", device="default"),
@@ -439,7 +477,7 @@ def build_depth_refcontrol_edit_prompt(
         "21": _node("Flux2Scheduler", steps=steps, width=_link("16", 0), height=_link("16", 1)),
         "22": _node("KSamplerSelect", sampler_name="euler"),
         "23": _node("RandomNoise", noise_seed=seed),
-        "24": _node("CFGGuider", model=_link("4"), positive=_link("18"), negative=_link("19"), cfg=cfg),
+        "24": _node("CFGGuider", model=model_link, positive=_link("18"), negative=_link("19"), cfg=cfg),
         "25": _node(
             "SamplerCustomAdvanced",
             noise=_link("23"),
@@ -451,6 +489,9 @@ def build_depth_refcontrol_edit_prompt(
         "26": _node("VAEDecode", samples=_link("25"), vae=_link("3")),
         "27": _node("SaveImage", images=_link("26"), filename_prefix="Flux2-Klein-RefControl-Depth"),
     }
+    if use_teacache:
+        model_link = _apply_teacache(nodes, model_link)
+        nodes["24"]["inputs"]["model"] = model_link
     return nodes
 
 

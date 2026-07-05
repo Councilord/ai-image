@@ -180,12 +180,12 @@ def test_image_edit_handler_routes_to_depth_path_only_when_enabled(monkeypatch) 
     monkeypatch.setattr(app, "run_edit", fake_run_edit)
     monkeypatch.setattr(app, "run_depth_edit", fake_run_depth_edit)
 
-    result = list(app._edit_handler("input.png", None, "prompt", "negative", "out", 4, 1.0, 1.0, 0, "int8", False, False, False, False))
+    result = list(app._edit_handler("input.png", None, "prompt", "negative", "out", 4, 1.0, 1.0, 0, "int8", False, False, False, False, False))
     assert result == [("edit.png", None, None, "edit")]
     assert calls[0][0] == "edit"
 
     calls.clear()
-    result = list(app._edit_handler("input.png", "reference.png", "prompt", "negative", "out", 4, 1.0, 1.0, 0, "int8", False, False, True, False))
+    result = list(app._edit_handler("input.png", "reference.png", "prompt", "negative", "out", 4, 1.0, 1.0, 0, "int8", False, False, False, True, False))
     assert result == [("depth.png", None, "depth-map.png", "depth")]
     assert calls[0][0] == "depth"
 
@@ -209,6 +209,7 @@ def test_app_exposes_model_cleanup_controls() -> None:
     ]
     assert "Remove unused / duplicate models" in button_values
     assert "Confirm removal" in button_values
+    assert any("TeaCache speedup" in str(label or "") for label in labels)
     assert not any(label and "base instead" in str(label).lower() for label in labels)
 
 
@@ -221,7 +222,7 @@ def test_t2i_handler_streams_preview_then_final(monkeypatch) -> None:
 
     monkeypatch.setattr(app, "run_t2i", fake_run_t2i)
 
-    events = list(app._t2i_handler("prompt", "negative", "out", 1024, 1024, 4, 1.0, 0, "int8", False, False, True))
+    events = list(app._t2i_handler("prompt", "negative", "out", 1024, 1024, 4, 1.0, 0, "int8", False, False, False, True))
 
     assert events[0] == (None, "preview-1", "Rendering preview...")
     assert events[1] == (None, "preview-2", "Rendering preview...")

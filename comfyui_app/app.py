@@ -212,6 +212,7 @@ def _edit_handler(
     engine: str,
     use_torch_compile: bool,
     mrflow: bool,
+    use_teacache: bool,
     depth_lock: bool,
     live_preview: bool,
 ) -> object:
@@ -227,6 +228,7 @@ def _edit_handler(
                 output_dir,
                 seed=int(seed),
                 megapixels=float(megapixels),
+                use_teacache=bool(use_teacache),
             )
             yield str(result.image_path), None, _as_gr_image(result.preview_path), result.status
             return
@@ -306,6 +308,7 @@ def _t2i_handler(
     engine: str,
     use_torch_compile: bool,
     mrflow: bool,
+    use_teacache: bool,
     live_preview: bool,
 ) -> object:
     try:
@@ -320,6 +323,7 @@ def _t2i_handler(
                 cfg=float(cfg),
                 seed=int(seed),
                 engine=engine,
+                use_teacache=bool(use_teacache),
                 use_torch_compile=bool(use_torch_compile),
                 mrflow=bool(mrflow),
             )
@@ -345,6 +349,7 @@ def _t2i_handler(
                     cfg=float(cfg),
                     seed=int(seed),
                     engine=engine,
+                    use_teacache=bool(use_teacache),
                     use_torch_compile=bool(use_torch_compile),
                     mrflow=bool(mrflow),
                     preview_callback=preview_callback,
@@ -629,6 +634,10 @@ def build_app() -> "gr.Blocks":
                         label="MrFlow staged (experimental - faster; low-res generate + upscale + refine)",
                         value=False,
                     )
+                    edit_teacache = gr.Checkbox(
+                        label="Experimental: TeaCache speedup (multi-step flows only)",
+                        value=False,
+                    )
                     edit_depth_lock = gr.Checkbox(
                         label="Pose/Shape lock (depth reference) — experimental, slower (~20 steps, base model)",
                         value=False,
@@ -639,7 +648,7 @@ def build_app() -> "gr.Blocks":
                     edit_status = gr.Textbox(label="Status")
             edit_run = edit_button.click(
                 fn=_edit_handler,
-                inputs=[edit_image, edit_reference, edit_prompt, edit_negative, edit_output, edit_steps, edit_cfg, edit_megapixels, edit_seed, edit_engine, edit_compile, edit_mrflow, edit_depth_lock, edit_live_preview],
+                inputs=[edit_image, edit_reference, edit_prompt, edit_negative, edit_output, edit_steps, edit_cfg, edit_megapixels, edit_seed, edit_engine, edit_compile, edit_mrflow, edit_teacache, edit_depth_lock, edit_live_preview],
                 outputs=[edit_result, edit_live_preview_image, edit_depth_preview, edit_status],
             )
             edit_depth_lock.change(
@@ -750,13 +759,17 @@ def build_app() -> "gr.Blocks":
                         label="MrFlow staged (experimental - faster; low-res generate + upscale + refine)",
                         value=False,
                     )
+                    t2i_teacache = gr.Checkbox(
+                        label="Experimental: TeaCache speedup (multi-step flows only)",
+                        value=False,
+                    )
                     t2i_button = gr.Button("Generate")
                     t2i_stop = gr.Button("Stop")
                     t2i_result = gr.Image(label="Result")
                     t2i_status = gr.Textbox(label="Status")
             t2i_evt = t2i_button.click(
                 fn=_t2i_handler,
-                inputs=[t2i_prompt, t2i_negative, t2i_output, t2i_width, t2i_height, t2i_steps, t2i_cfg, t2i_seed, t2i_engine, t2i_compile, t2i_mrflow, t2i_live_preview],
+                inputs=[t2i_prompt, t2i_negative, t2i_output, t2i_width, t2i_height, t2i_steps, t2i_cfg, t2i_seed, t2i_engine, t2i_compile, t2i_mrflow, t2i_teacache, t2i_live_preview],
                 outputs=[t2i_result, t2i_live_preview_image, t2i_status],
             )
             t2i_live_preview.change(

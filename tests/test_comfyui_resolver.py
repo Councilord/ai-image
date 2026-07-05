@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from comfyui_app import model_resolver
+from comfyui_app import workflow_builder
 from comfyui_app.model_resolver import ModelResolverError, resolve_models
 from comfyui_app.vram import select_tier
 from comfyui_app.workflow_builder import (
@@ -194,6 +195,27 @@ def test_build_depth_refcontrol_edit_prompt_uses_safetensors_loader_for_int8() -
     assert prompt["1"]["inputs"]["weight_dtype"] == "default"
 
 
+def test_build_depth_refcontrol_edit_prompt_adds_teacache_after_lora(monkeypatch) -> None:
+    monkeypatch.setattr(workflow_builder, "_teacache_available", lambda: True)
+
+    prompt = build_depth_refcontrol_edit_prompt(
+        diffusion_model="flux-2-klein-base-4b-Q8_0.gguf",
+        text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
+        vae_model="flux2-vae.safetensors",
+        lora_model_name="flux2_klein_4b_refcontrol_depth.safetensors",
+        reference_image_name="reference.png",
+        structure_image_name="structure.png",
+        prompt="a character portrait",
+        negative="blurry",
+        seed=77,
+        use_teacache=True,
+    )
+
+    tea_node_id = next(node_id for node_id, node in prompt.items() if node["class_type"] == "TeaCache")
+    assert prompt[tea_node_id]["inputs"]["model"] == ["4", 0]
+    assert prompt["24"]["inputs"]["model"] == [tea_node_id, 0]
+
+
 def test_resolve_depth_control_models_supports_int8_base(monkeypatch) -> None:
     trees = {
         "unsloth/FLUX.2-klein-base-4B-GGUF": _tree("flux-2-klein-base-4b-Q8_0.gguf"),
@@ -233,6 +255,57 @@ def test_build_t2i_prompt_sets_new_decode_inputs_when_tiled() -> None:
     assert prompt[decode_node_id]["inputs"]["overlap"] == 64
     assert prompt[decode_node_id]["inputs"]["temporal_size"] == 64
     assert prompt[decode_node_id]["inputs"]["temporal_overlap"] == 8
+
+
+def test_build_t2i_prompt_adds_teacache_node_when_available(monkeypatch) -> None:
+    monkeypatch.setattr(workflow_builder, "_teacache_available", lambda: True)
+
+    prompt = build_t2i_prompt(
+        diffusion_model="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
+        text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
+        vae_model="full_encoder_small_decoder.safetensors",
+        prompt="a sunny portrait",
+        negative="blurry",
+        seed=0,
+        steps=20,
+        cfg=1.0,
+        width=1024,
+        height=1024,
+        batch_size=1,
+        use_tiled_decode=False,
+        decode_tile_size=1024,
+        use_teacache=True,
+    )
+
+    tea_node_id = next(node_id for node_id, node in prompt.items() if node["class_type"] == "TeaCache")
+    assert prompt[tea_node_id]["inputs"]["model"] == ["1", 0]
+    assert prompt[tea_node_id]["inputs"]["model_type"] == "flux"
+    assert {"model", "model_type", "rel_l1_thresh", "start_percent", "end_percent", "cache_device"} <= set(prompt[tea_node_id]["inputs"])
+    assert prompt["10"]["inputs"]["model"] == [tea_node_id, 0]
+
+
+def test_build_t2i_prompt_skips_teacache_when_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(workflow_builder, "_teacache_available", lambda: False)
+
+    prompt = build_t2i_prompt(
+        diffusion_model="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
+        text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
+        vae_model="full_encoder_small_decoder.safetensors",
+        prompt="a sunny portrait",
+        negative="blurry",
+        seed=0,
+        steps=20,
+        cfg=1.0,
+        width=1024,
+        height=1024,
+        batch_size=1,
+        use_tiled_decode=False,
+        decode_tile_size=1024,
+        use_teacache=True,
+    )
+
+    assert all(node["class_type"] != "TeaCache" for node in prompt.values())
+    assert prompt["10"]["inputs"]["model"] == ["1", 0]
 
 
 def test_build_t2i_prompt_adds_torch_compile_node_when_requested() -> None:

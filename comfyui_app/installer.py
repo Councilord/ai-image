@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -40,6 +41,61 @@ def _git_clone_or_pull(repo_url: str, target_dir: Path) -> None:
 def _install_requirements(requirements_file: Path) -> None:
     if requirements_file.exists():
         _run([sys.executable, "-m", "pip", "install", "-r", str(requirements_file)])
+
+
+def _torch_runtime() -> tuple[str, int, int, str]:
+    import torch
+
+    match = re.match(r"^(\d+)\.(\d+)", torch.__version__)
+    if not match:
+        raise RuntimeError(f"Unable to parse the installed torch version: {torch.__version__}")
+    cuda_version = str(torch.version.cuda or "")
+    return torch.__version__, int(match.group(1)), int(match.group(2)), cuda_version
+
+
+def _sageattention_wheel_url() -> str | None:
+    _, major, minor, cuda_version = _torch_runtime()
+    if major != 2:
+        return None
+    if minor == 6 and cuda_version.startswith("12.6"):
+        return "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post3/sageattention-2.2.0+cu126torch2.6.0.post3-cp39-abi3-win_amd64.whl"
+    if minor == 7 and cuda_version.startswith("12."):
+        return "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post3/sageattention-2.2.0+cu128torch2.7.1.post3-cp39-abi3-win_amd64.whl"
+    if minor == 8 and cuda_version.startswith("12."):
+        return "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post3/sageattention-2.2.0+cu128torch2.8.0.post3-cp39-abi3-win_amd64.whl"
+    if minor == 9 and (cuda_version.startswith("12.") or cuda_version.startswith("13.")):
+        wheel = "sageattention-2.2.0+cu130torch2.9.0andhigher.post4-cp39-abi3-win_amd64.whl" if cuda_version.startswith("13.") else "sageattention-2.2.0+cu128torch2.9.0andhigher.post4-cp39-abi3-win_amd64.whl"
+        release = "v2.2.0-windows.post4"
+        return f"https://github.com/woct0rdho/SageAttention/releases/download/{release}/{wheel}"
+    return None
+
+
+def _install_sageattention() -> None:
+    print("Trying to install SageAttention for the current torch/CUDA combination...")
+    _run([sys.executable, "-m", "pip", "install", "--upgrade", "triton-windows"])
+    torch_version, _, _, cuda_version = _torch_runtime()
+    print(f"Detected torch {torch_version} with CUDA {cuda_version or 'unknown'}.")
+    wheel_url = _sageattention_wheel_url()
+    if wheel_url is None:
+        print("No matching SageAttention wheel was found for this torch/CUDA pair; falling back to pip install sageattention.")
+        _run([sys.executable, "-m", "pip", "install", "--upgrade", "sageattention"])
+        print("SageAttention fallback install finished. Relaunch with Launch.bat.")
+        return
+    try:
+        print(f"Installing SageAttention wheel: {wheel_url.rsplit('/', 1)[-1]}")
+        _run([sys.executable, "-m", "pip", "install", "--upgrade", wheel_url])
+    except Exception as exc:
+        print(f"WARNING: The SageAttention wheel install did not finish: {exc}")
+        print("Falling back to the PyPI package.")
+        _run([sys.executable, "-m", "pip", "install", "--upgrade", "sageattention"])
+    print("SageAttention install finished. On an RTX 3070, legacy kernels are expected; relaunch with Launch.bat.")
+
+
+def _install_teacache_support() -> None:
+    print("Trying to install the ComfyUI-TeaCache custom node...")
+    custom_nodes = COMFYUI_DIR / "custom_nodes"
+    custom_nodes.mkdir(parents=True, exist_ok=True)
+    _install_custom_node("https://github.com/welltop-cn/ComfyUI-TeaCache.git", custom_nodes / "ComfyUI-TeaCache")
 
 
 def _load_env_lines(path: Path) -> dict[str, str]:
@@ -106,6 +162,18 @@ def _install_experimental_speedups() -> None:
         print(f"WARNING: The Triton install did not finish: {exc}")
         print("torch.compile requires Triton on Windows, so it will otherwise error.")
 
+    try:
+        _install_sageattention()
+    except Exception as exc:
+        print(f"WARNING: The SageAttention install did not finish: {exc}")
+        print("The app will keep working without SageAttention.")
+
+    try:
+        _install_teacache_support()
+    except Exception as exc:
+        print(f"WARNING: The TeaCache custom node could not be prepared: {exc}")
+        print("TeaCache will not be available until it is installed manually.")
+
 
 def _install_rtx_vsr_support() -> None:
     print("Trying to add the RTX video super-resolution node...")
@@ -162,16 +230,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--with-experimental-speedups",
         action="store_true",
-        help="Also try the optional Nunchaku experimental speed path.",
+        help="Also try the optional Nunchaku, SageAttention, Triton, and TeaCache speed paths.",
     )
     parser.add_argument(
         "--with-depth-control",
         action="store_true",
         help="Also install the optional FLUX.2 depth pose/shape lock assets.",
     )
+    parser.add_argument(
+        "--install-sageattention",
+        action="store_true",
+        help="Install SageAttention in the active venv and exit.",
+    )
+    parser.add_argument(
+        "--install-teacache",
+        action="store_true",
+        help="Install the ComfyUI-TeaCache custom node in ComfyUI/custom_nodes and exit.",
+    )
     args = parser.parse_args(argv)
 
     try:
+        if args.install_sageattention or args.install_teacache:
+            if args.install_sageattention:
+                _install_sageattention()
+            if args.install_teacache:
+                _install_teacache_support()
+            return 0
         if not args.refresh_models:
             _git_clone_or_pull("https://github.com/comfyanonymous/ComfyUI.git", COMFYUI_DIR)
             _install_requirements(COMFYUI_DIR / "requirements.txt")
