@@ -105,15 +105,14 @@ def _image_dimensions(image_path: Path) -> tuple[int, int]:
     return width, height
 
 
-def _depth_control_assets(use_fp8_base: bool = False) -> tuple[str, str]:
+def _depth_control_assets() -> tuple[str, str]:
     manifest = load_resolved_manifest()
     if not isinstance(manifest, dict):
         manifest = {}
     models = manifest.get("models")
     if not isinstance(models, dict):
         models = {}
-    base_key = "depth_control_base_fp8" if use_fp8_base else "depth_control_base_int8"
-    base = models.get(base_key)
+    base = models.get("depth_control_base_int8")
     lora = models.get("depth_control_lora")
     if not isinstance(base, dict) or not isinstance(lora, dict):
         token = get_hf_token()
@@ -121,8 +120,8 @@ def _depth_control_assets(use_fp8_base: bool = False) -> tuple[str, str]:
             raise ModelResolverError(
                 "Pose/Shape lock (depth) is not installed. Re-run Install.bat with --with-depth-control."
             )
-        resolved = resolve_depth_control_models(token, use_int8_base=not use_fp8_base)
-        download_models(resolved, token)
+        resolved = resolve_depth_control_models(token)
+        download_models(resolved, token, engine="int8")
         manifest = load_resolved_manifest()
         if not isinstance(manifest, dict):
             raise ModelResolverError(
@@ -133,7 +132,7 @@ def _depth_control_assets(use_fp8_base: bool = False) -> tuple[str, str]:
             raise ModelResolverError(
                 "Pose/Shape lock (depth) is not installed. Re-run Install.bat with --with-depth-control."
             )
-        base = models.get(base_key)
+        base = models.get("depth_control_base_int8")
         lora = models.get("depth_control_lora")
         if not isinstance(base, dict) or not isinstance(lora, dict):
             raise ModelResolverError(
@@ -251,7 +250,7 @@ def run_edit(
     try:
         return _run_prompt(client, prompt_dict, target_dir, output_name, timeout, preview_callback=preview_callback)
     except Exception as exc:
-        if engine == "default" and not prefer_gguf and _retryable_oom(str(exc)):
+        if not prefer_gguf and _retryable_oom(str(exc)):
             logger.warning("Switching to GGUF fallback after a memory error.")
             fallback = _resolved_filename_map(vram_gb, True, engine)
             builder = build_mrflow_edit_prompt if mrflow else build_edit_prompt
@@ -305,7 +304,7 @@ def run_t2i(
     use_tiled_decode: bool | None = None,
     timeout: float = 600.0,
     prefer_gguf: bool = False,
-    engine: str = "default",
+    engine: str = "int8",
     use_torch_compile: bool = False,
     mrflow: bool = False,
     mrflow_low_width: int = 512,
@@ -368,7 +367,7 @@ def run_t2i(
     try:
         return _run_prompt(client, prompt_dict, target_dir, output_name, timeout, preview_callback=preview_callback)
     except Exception as exc:
-        if engine == "default" and not prefer_gguf and _retryable_oom(str(exc)):
+        if not prefer_gguf and _retryable_oom(str(exc)):
             logger.warning("Switching to GGUF fallback after a memory error.")
             fallback = _resolved_filename_map(vram_gb, True, engine)
             builder = build_mrflow_t2i_prompt if mrflow else build_t2i_prompt
@@ -471,7 +470,6 @@ def run_depth_edit(
     cfg: float = 5.0,
     seed: int = 0,
     lora_strength: float = 1.0,
-    use_fp8_base: bool = False,
     megapixels: float = 1.0,
     timeout: float = 600.0,
     client: ComfyClient | None = None,
@@ -481,8 +479,8 @@ def run_depth_edit(
     reference_path = Path(reference_image_path) if reference_image_path is not None else depth_source_path
     target_dir = Path(output_dir)
     vram_gb, _, _ = detect_vram()
-    filenames = _resolved_filename_map(vram_gb, False, "default")
-    depth_base_model, depth_lora_model = _depth_control_assets(use_fp8_base=use_fp8_base)
+    filenames = _resolved_filename_map(vram_gb, False, "int8")
+    depth_base_model, depth_lora_model = _depth_control_assets()
     depth_source_name = client.upload_image(depth_source_path)
     reference_name = client.upload_image(reference_path) if reference_path != depth_source_path else depth_source_name
     prompt_dict = build_depth_refcontrol_edit_prompt(

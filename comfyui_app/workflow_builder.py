@@ -11,7 +11,7 @@ TORCH_COMPILE_NODE_CLASS = "TorchCompileModel"
 # Verified from nunchaku-ai/ComfyUI-nunchaku nodes/models/flux.py:
 # class_type / mapping key is "NunchakuFluxDiTLoader".
 NUNCHAKU_DIT_LOADER_CLASS = "NunchakuFluxDiTLoader"
-BASE_FLUX2_KLEIN_FP8_MODEL = "flux-2-klein-base-4b-fp8.safetensors"
+BASE_FLUX2_KLEIN_INT8_MODEL = "flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors"
 DEPTH_REFCONTROL_LORA_MODEL = "flux2_klein_4b_refcontrol_depth.safetensors"
 DEPTH_ANYTHING_V2_PREPROCESSOR_CLASS = "DepthAnythingV2Preprocessor"
 LORA_LOADER_MODEL_ONLY_CLASS = "LoraLoaderModelOnly"
@@ -517,7 +517,7 @@ def dump_workflow_templates(output_dir: Path | None = None) -> tuple[Path, Path]
     target_dir = output_dir or WORKFLOWS_DIR
     target_dir.mkdir(parents=True, exist_ok=True)
     edit = build_edit_prompt(
-        diffusion_model="flux-2-klein-4b-fp8.safetensors",
+        diffusion_model="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
         text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
         vae_model="full_encoder_small_decoder.safetensors",
         prompt="turn this image into a realistic photo",
@@ -532,7 +532,7 @@ def dump_workflow_templates(output_dir: Path | None = None) -> tuple[Path, Path]
         decode_tile_size=1024,
     )
     t2i = build_t2i_prompt(
-        diffusion_model="flux-2-klein-4b-fp8.safetensors",
+        diffusion_model="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
         text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
         vae_model="full_encoder_small_decoder.safetensors",
         prompt="a cinematic portrait photo",

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterable
 
 from comfyui_app.config import COMFYUI_DIR, MODELS_DIR
-from comfyui_app.model_resolver import ModelResolverError, _write_manifest, load_resolved_manifest
+from comfyui_app.model_resolver import MODEL_REGISTRY, ModelResolverError, _write_manifest, load_resolved_manifest
 
 MODEL_FILE_EXTENSIONS = {".safetensors", ".gguf", ".pth", ".pt", ".ckpt", ".bin"}
 
@@ -92,6 +92,31 @@ def _scan_root(root: Path) -> list[InstalledModelEntry]:
     return entries
 
 
+def _registry_kind_index() -> tuple[set[str], dict[str, str]]:
+    kinds: set[str] = set()
+    dest_subdirs: dict[str, str] = {}
+    for component_groups in MODEL_REGISTRY.values():
+        for candidates in component_groups.values():
+            for candidate in candidates:
+                kinds.add(candidate.kind.lower())
+                dest_subdirs.setdefault(candidate.kind.lower(), candidate.dest_subdir)
+    return kinds, dest_subdirs
+
+
+def _entry_payload(entry: InstalledModelEntry, *, reason: str | None = None) -> dict[str, object]:
+    payload = {
+        "category": entry.category,
+        "filename": entry.filename,
+        "path": entry.path,
+        "size_bytes": entry.size_bytes,
+        "size": format_size(entry.size_bytes),
+        "label": entry.label,
+    }
+    if reason is not None:
+        payload["reason"] = reason
+    return payload
+
+
 def list_installed_models() -> dict[str, object]:
     entries: list[InstalledModelEntry] = []
     entries.extend(_scan_root(MODELS_DIR))
@@ -102,19 +127,52 @@ def list_installed_models() -> dict[str, object]:
     total_bytes = sum(entry.size_bytes for entry in entries)
     return {
         "entries": [
-            {
-                "category": entry.category,
-                "filename": entry.filename,
-                "path": entry.path,
-                "size_bytes": entry.size_bytes,
-                "size": format_size(entry.size_bytes),
-                "label": entry.label,
-            }
+            _entry_payload(entry)
             for entry in entries
         ],
         "total_bytes": total_bytes,
         "total": format_size(total_bytes),
         "count": len(entries),
+    }
+
+
+def find_removable_models() -> dict[str, object]:
+    entries = _scan_root(MODELS_DIR)
+    if not entries:
+        return {"entries": [], "total_bytes": 0, "total": format_size(0), "count": 0}
+
+    known_kinds, dest_subdirs = _registry_kind_index()
+    grouped: dict[str, list[InstalledModelEntry]] = {}
+    for entry in entries:
+        grouped.setdefault(entry.filename.lower(), []).append(entry)
+
+    removable: list[dict[str, object]] = []
+    for filename, group in grouped.items():
+        group_sorted = sorted(group, key=lambda item: (item.path.lower(), item.category.lower()))
+        keeper = group_sorted[0]
+        if len(group_sorted) > 1:
+            preferred_subdir = dest_subdirs.get(filename)
+            if preferred_subdir is not None:
+                preferred = next(
+                    (entry for entry in group_sorted if entry.category == preferred_subdir),
+                    None,
+                )
+                if preferred is not None:
+                    keeper = preferred
+            for entry in group_sorted:
+                if entry.path == keeper.path:
+                    continue
+                removable.append(_entry_payload(entry, reason="duplicate"))
+        if filename not in known_kinds and len(group_sorted) == 1:
+            removable.append(_entry_payload(keeper, reason="unused"))
+
+    removable.sort(key=lambda item: (str(item["reason"]), str(item["category"]).lower(), str(item["filename"]).lower(), str(item["path"]).lower()))
+    total_bytes = sum(int(entry["size_bytes"]) for entry in removable)
+    return {
+        "entries": removable,
+        "total_bytes": total_bytes,
+        "total": format_size(total_bytes),
+        "count": len(removable),
     }
 
 
@@ -187,3 +245,10 @@ def delete_models(paths: Iterable[str | Path]) -> dict[str, object]:
     refreshed["freed_bytes"] = freed_bytes
     refreshed["freed"] = format_size(freed_bytes)
     return refreshed
+
+
+def remove_unused_models(paths: Iterable[str | Path] | None = None) -> dict[str, object]:
+    if paths is None:
+        removable = find_removable_models()
+        paths = [entry["path"] for entry in removable["entries"] if isinstance(entry.get("path"), str)]
+    return delete_models(paths)

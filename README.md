@@ -67,11 +67,12 @@ The resolver writes into the standard ComfyUI folders:
 
 ## Manage Models
 
-Use the **Manage Models** tab to review installed model files, see their sizes, and delete ones you no longer need to free disk space.
+Use the **Manage Models** tab to review installed model files, see their sizes, and delete ones you no longer need to free disk space. It also includes a cleanup preview for unused / duplicate models before you confirm deletion.
 
 - It shows the file category, filename, and size.
 - Deleted files are removed from disk and from the resolved manifest.
 - If you need a deleted model again later, the app will re-download it on demand when you pick that engine or feature path again.
+- The cleanup flow is also available headlessly via `Cleanup-Unused-Models.bat` from the repository root.
 
 ## Upscaling
 
@@ -92,7 +93,7 @@ The fallback upscaler uses the core ComfyUI `UpscaleModelLoader` + `ImageUpscale
 ## Engine choices
 
 - **INT8** is the default engine in the UI and install flow.
-- **fp8** stays selectable for guaranteed compatibility.
+- The app is now INT8-only for the main diffusion path.
 - **GGUF Q4/Q5** remains available on the lower-VRAM tier path.
 
 ### Video output
@@ -122,7 +123,7 @@ Batch jobs now write into a timestamped per-run subfolder under the chosen outpu
 
 | Area | Default | Why |
 | --- | --- | --- |
-| Diffusion | FLUX.2 Klein 4B INT8 | Native INT8 tensor cores on Ampere are faster than emulated fp8, with the same VRAM class. |
+| Diffusion | FLUX.2 Klein 4B INT8 | Native INT8 tensor cores on Ampere are faster than the older baseline path, with the same VRAM class. |
 | Text encoder | Qwen 3 4B fp4 | Lower VRAM than fp16/bf16. |
 | VAE | FLUX.2 small decoder | Best default fit for the app's edit flow. |
 | Decode | Tiled by default on low-memory tiers | Helps keep 8 GB cards from spiking. |
@@ -130,8 +131,8 @@ Batch jobs now write into a timestamped per-run subfolder under the chosen outpu
 
 Why this stack:
 
-- The RTX 3070 is Ampere, so INT8 runs on native tensor cores while fp8 is emulated.
-- Expect roughly a 25-35% steady-state speedup versus fp8, with near-lossless quality for this model.
+- The RTX 3070 is Ampere, so INT8 runs on native tensor cores.
+- Expect roughly a 25-35% steady-state speedup versus the older baseline path, with near-lossless quality for this model.
 - The first run in a session is slower because kernels warm up; after that the INT8 path is the fastest default.
 - The small decoder VAE keeps the edit pipeline compact.
 - ComfyUI's offload model works well for the 8 GB target.
@@ -189,7 +190,6 @@ What it does:
 Requirements:
 
 - base model: `unsloth/FLUX.2-klein-base-4B-GGUF` (`flux-2-klein-base-4b-Q8_0.gguf`)
-- optional fp8 fallback: `black-forest-labs/FLUX.2-klein-base-4b-fp8`
 - depth LoRA: `thedeoxen/refcontrol-FLUX.2-klein-4B-reference-depth-lora`
 - custom node: `Fannovel16/comfyui_controlnet_aux`
 
@@ -204,7 +204,6 @@ Notes:
 - Trigger word: `refcontrol`
 - This path uses the undistilled base model, so it is slower than the normal 4-step edit path.
 - The 8-bit Q8_0 GGUF base is the default here and loads through ComfyUI-GGUF; on Ampere it should still run efficiently while avoiding the raw safetensors/ModelOpt path.
-- The fp8 base remains available as an experimental fallback if you want to compare quality.
 - Expect roughly a ~20 step workflow and about a 5x slowdown versus the distilled edit path.
 - For FLUX.2 Klein 4B, only the **depth** lock mode is available here.
 

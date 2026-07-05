@@ -81,7 +81,7 @@ def detect_vram() -> tuple[float, str, bool]:
 def select_tier(vram_gb: float) -> ModelTier:
     if vram_gb >= 16.0:
         return ModelTier(
-            diffusion="flux2_fp8",
+            diffusion="int8",
             text_encoder="flux2_full",
             use_tiled_decode=False,
             extra_launch_flags=[],
@@ -89,7 +89,7 @@ def select_tier(vram_gb: float) -> ModelTier:
         )
     if vram_gb >= 10.0:
         return ModelTier(
-            diffusion="flux2_fp8",
+            diffusion="int8",
             text_encoder="flux2_fp4",
             use_tiled_decode=False,
             extra_launch_flags=[],
@@ -97,7 +97,7 @@ def select_tier(vram_gb: float) -> ModelTier:
         )
     if vram_gb >= 7.0:
         return ModelTier(
-            diffusion="flux2_fp8",
+            diffusion="int8",
             text_encoder="flux2_fp4",
             use_tiled_decode=True,
             extra_launch_flags=[],

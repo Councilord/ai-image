@@ -20,7 +20,7 @@ def _tree(*paths: str, size: int = 1) -> list[dict[str, object]]:
 
 def test_select_tier_for_rtx_3070_8gb() -> None:
     tier = select_tier(8.0)
-    assert tier.diffusion == "flux2_fp8"
+    assert tier.diffusion == "int8"
     assert tier.text_encoder == "flux2_fp4"
     assert tier.use_tiled_decode is True
     assert tier.extra_launch_flags == []
@@ -36,7 +36,7 @@ def test_select_tier_for_6gb_uses_gguf() -> None:
 
 def test_build_edit_prompt_injects_expected_values() -> None:
     prompt = build_edit_prompt(
-        diffusion_model="flux-2-klein-4b-fp8.safetensors",
+        diffusion_model="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
         text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
         vae_model="flux2-vae.safetensors",
         prompt="make this photo realistic",
@@ -81,7 +81,7 @@ def test_build_edit_prompt_switches_loader_for_gguf() -> None:
         decode_tile_size=1024,
     )
     safetensors_prompt = build_edit_prompt(
-        diffusion_model="flux-2-klein-4b-fp8.safetensors",
+        diffusion_model="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
         text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
         vae_model="flux2-vae.safetensors",
         prompt="make this photo realistic",
@@ -125,7 +125,7 @@ def test_build_edit_prompt_uses_nunchaku_loader_for_experimental_engine() -> Non
 
 def test_build_t2i_prompt_omits_image_encoding_nodes() -> None:
     prompt = build_t2i_prompt(
-        diffusion_model="flux-2-klein-4b-fp8.safetensors",
+        diffusion_model="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
         text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
         vae_model="flux2-vae.safetensors",
         prompt="a sunny portrait",
@@ -176,9 +176,9 @@ def test_build_depth_refcontrol_edit_prompt_uses_depth_assets() -> None:
     assert "SamplerCustomAdvanced" in class_types
 
 
-def test_build_depth_refcontrol_edit_prompt_uses_safetensors_loader() -> None:
+def test_build_depth_refcontrol_edit_prompt_uses_safetensors_loader_for_int8() -> None:
     prompt = build_depth_refcontrol_edit_prompt(
-        diffusion_model="flux-2-klein-base-4b-fp8.safetensors",
+        diffusion_model="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
         text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
         vae_model="flux2-vae.safetensors",
         lora_model_name="flux2_klein_4b_refcontrol_depth.safetensors",
@@ -190,13 +190,12 @@ def test_build_depth_refcontrol_edit_prompt_uses_safetensors_loader() -> None:
     )
 
     assert prompt["1"]["class_type"] == "UNETLoader"
-    assert prompt["1"]["inputs"]["unet_name"] == "flux-2-klein-base-4b-fp8.safetensors"
+    assert prompt["1"]["inputs"]["unet_name"] == "flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors"
     assert prompt["1"]["inputs"]["weight_dtype"] == "default"
 
 
 def test_resolve_depth_control_models_supports_int8_base(monkeypatch) -> None:
     trees = {
-        "black-forest-labs/FLUX.2-klein-base-4b-fp8": _tree("flux-2-klein-base-4b-fp8.safetensors"),
         "unsloth/FLUX.2-klein-base-4B-GGUF": _tree("flux-2-klein-base-4b-Q8_0.gguf"),
         "thedeoxen/refcontrol-FLUX.2-klein-4B-reference-depth-lora": _tree("flux2_klein_4b_refcontrol_depth.safetensors"),
     }
@@ -207,17 +206,14 @@ def test_resolve_depth_control_models_supports_int8_base(monkeypatch) -> None:
     monkeypatch.setattr(model_resolver, "_fetch_repo_tree", fake_fetch)
 
     int8 = model_resolver.resolve_depth_control_models("token")
-    fp8 = model_resolver.resolve_depth_control_models("token", use_int8_base=False)
 
     assert Path(str(int8["depth_control_base_int8"]["local_filename"])).name == "flux-2-klein-base-4b-Q8_0.gguf"
-    assert Path(str(fp8["depth_control_base_fp8"]["local_filename"])).name == "flux-2-klein-base-4b-fp8.safetensors"
-    assert Path(str(fp8["depth_control_lora"]["local_filename"])).name == "flux2_klein_4b_refcontrol_depth.safetensors"
     assert Path(str(int8["depth_control_lora"]["local_filename"])).name == "flux2_klein_4b_refcontrol_depth.safetensors"
 
 
 def test_build_t2i_prompt_sets_new_decode_inputs_when_tiled() -> None:
     prompt = build_t2i_prompt(
-        diffusion_model="flux-2-klein-4b-fp8.safetensors",
+        diffusion_model="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
         text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
         vae_model="full_encoder_small_decoder.safetensors",
         prompt="a sunny portrait",
@@ -241,7 +237,7 @@ def test_build_t2i_prompt_sets_new_decode_inputs_when_tiled() -> None:
 
 def test_build_t2i_prompt_adds_torch_compile_node_when_requested() -> None:
     prompt = build_t2i_prompt(
-        diffusion_model="flux-2-klein-4b-fp8.safetensors",
+        diffusion_model="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
         text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
         vae_model="full_encoder_small_decoder.safetensors",
         prompt="a sunny portrait",
@@ -266,7 +262,7 @@ def test_build_t2i_prompt_adds_torch_compile_node_when_requested() -> None:
 
 def test_build_mrflow_t2i_prompt_adds_upscale_and_refine_nodes() -> None:
     prompt = build_mrflow_t2i_prompt(
-        diffusion_model="flux-2-klein-4b-fp8.safetensors",
+        diffusion_model="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
         text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
         vae_model="full_encoder_small_decoder.safetensors",
         upscale_model_name="RealESRGAN_x2plus.pth",
@@ -300,7 +296,7 @@ def test_build_mrflow_t2i_prompt_adds_upscale_and_refine_nodes() -> None:
 
 def test_build_mrflow_edit_prompt_adds_upscale_and_refine_nodes() -> None:
     prompt = build_mrflow_edit_prompt(
-        diffusion_model="flux-2-klein-4b-fp8.safetensors",
+        diffusion_model="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
         text_encoder_model="qwen_3_4b_fp4_flux2.safetensors",
         vae_model="full_encoder_small_decoder.safetensors",
         upscale_model_name="RealESRGAN_x2plus.pth",
@@ -339,10 +335,6 @@ def test_resolver_default_engine_picks_int8_diffusion(monkeypatch) -> None:
         "Bedovyy/FLUX.2-klein-4B-INT8-Comfy": _tree(
             "flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
         ),
-        "black-forest-labs/FLUX.2-klein-4b-fp8": _tree(
-            "flux-2-klein-4b-fp8.safetensors",
-            "notes.txt",
-        ),
         "black-forest-labs/FLUX.2-small-decoder": _tree(
             "full_encoder_small_decoder.safetensors",
         ),
@@ -365,10 +357,33 @@ def test_resolver_default_engine_picks_int8_diffusion(monkeypatch) -> None:
     assert Path(str(resolved["upscale"]["local_filename"])).name == "RealESRGAN_x2plus.pth"
 
 
-def test_resolver_engine_default_still_picks_fp8_diffusion(monkeypatch) -> None:
+def test_resolver_prefers_gguf_when_requested(monkeypatch) -> None:
     trees = {
         "Bedovyy/FLUX.2-klein-4B-INT8-Comfy": _tree("flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors"),
-        "black-forest-labs/FLUX.2-klein-4b-fp8": _tree("flux-2-klein-4b-fp8.safetensors"),
+        "unsloth/FLUX.2-klein-4B-GGUF": _tree(
+            "flux-2-klein-4b-Q4_K_M.gguf",
+            "flux-2-klein-4b-Q3_K_M.gguf",
+        ),
+        "black-forest-labs/FLUX.2-small-decoder": _tree("full_encoder_small_decoder.safetensors"),
+        "2kpr/Real-ESRGAN": _tree("RealESRGAN_x2plus.pth"),
+        "Comfy-Org/flux2-klein-4B": _tree(
+            "split_files/text_encoders/qwen_3_4b_fp4_flux2.safetensors",
+            "split_files/vae/flux2-vae.safetensors",
+        ),
+    }
+
+    def fake_fetch(repo: str, token: str | None):
+        return trees.get(repo, [])
+
+    monkeypatch.setattr(model_resolver, "_fetch_repo_tree", fake_fetch)
+    resolved = resolve_models(8.0, token="token", prefer_gguf=True)
+
+    assert Path(str(resolved["diffusion"]["local_filename"])).name == "flux-2-klein-4b-Q4_K_M.gguf"
+
+
+def test_resolver_engine_default_picks_int8_diffusion(monkeypatch) -> None:
+    trees = {
+        "Bedovyy/FLUX.2-klein-4B-INT8-Comfy": _tree("flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors"),
         "black-forest-labs/FLUX.2-small-decoder": _tree("full_encoder_small_decoder.safetensors"),
         "2kpr/Real-ESRGAN": _tree("RealESRGAN_x2plus.pth"),
         "Comfy-Org/flux2-klein-4B": _tree(
@@ -383,7 +398,7 @@ def test_resolver_engine_default_still_picks_fp8_diffusion(monkeypatch) -> None:
     monkeypatch.setattr(model_resolver, "_fetch_repo_tree", fake_fetch)
     resolved = resolve_models(8.0, token="token", engine="default")
 
-    assert Path(str(resolved["diffusion"]["local_filename"])).name == "flux-2-klein-4b-fp8.safetensors"
+    assert Path(str(resolved["diffusion"]["local_filename"])).name == "flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors"
 
 
 def test_resolver_engine_nunchaku_int4_picks_int4_diffusion(monkeypatch) -> None:
@@ -412,7 +427,6 @@ def test_resolver_engine_nunchaku_int4_picks_int4_diffusion(monkeypatch) -> None
 def test_resolver_falls_back_to_flux2_vae_when_small_decoder_missing(monkeypatch) -> None:
     trees = {
         "Bedovyy/FLUX.2-klein-4B-INT8-Comfy": _tree("flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors"),
-        "black-forest-labs/FLUX.2-klein-4b-fp8": _tree("flux-2-klein-4b-fp8.safetensors"),
         "2kpr/Real-ESRGAN": _tree("RealESRGAN_x2plus.pth"),
         "Comfy-Org/flux2-klein-4B": _tree(
             "split_files/text_encoders/qwen_3_4b_fp4_flux2.safetensors",

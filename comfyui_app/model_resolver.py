@@ -47,15 +47,6 @@ MODEL_REGISTRY: dict[str, dict[str, list[Candidate]]] = {
                 kind="flux-2-klein-4b_learned_int8mixed_tensorwise.safetensors",
             )
         ],
-        "flux2_fp8": [
-            Candidate(
-                repo="black-forest-labs/FLUX.2-klein-4b-fp8",
-                path_regex=r"(^|/)flux-2-klein-4b-fp8\.safetensors$",
-                dest_subdir="diffusion_models",
-                min_vram=7.0,
-                kind="flux-2-klein-4b-fp8.safetensors",
-            )
-        ],
         "flux2_gguf_q4_k_m": [
             Candidate(
                 repo="unsloth/FLUX.2-klein-4B-GGUF",
@@ -105,15 +96,6 @@ MODEL_REGISTRY: dict[str, dict[str, list[Candidate]]] = {
         ],
     },
     "depth_control": {
-        "base_fp8": [
-            Candidate(
-                repo="black-forest-labs/FLUX.2-klein-base-4b-fp8",
-                path_regex=r"(^|/)flux-2-klein-base-4b-fp8\.safetensors$",
-                dest_subdir="diffusion_models",
-                min_vram=7.0,
-                kind="flux-2-klein-base-4b-fp8.safetensors",
-            )
-        ],
         "base_int8": [
             Candidate(
                 repo="unsloth/FLUX.2-klein-base-4B-GGUF",
@@ -266,8 +248,13 @@ def resolve_models(
 
     tier = select_tier(vram_gb)
     diffusion_key = "nunchaku_int4" if engine == "nunchaku_int4" else ("int8" if engine == "int8" else tier.diffusion)
-    if prefer_gguf and diffusion_key == "flux2_fp8":
-        diffusion_key = "flux2_gguf_q4_k_m"
+    if prefer_gguf and diffusion_key not in {"nunchaku_int4"} and not diffusion_key.endswith(".gguf"):
+        if vram_gb >= 5.0:
+            diffusion_key = "flux2_gguf_q4_k_m"
+        elif vram_gb >= 4.0:
+            diffusion_key = "flux2_gguf_q3_k_m"
+        else:
+            diffusion_key = "flux2_gguf_q2_k"
     text_encoder_key = tier.text_encoder
 
     resolved = {
@@ -282,14 +269,13 @@ def resolve_models(
     return resolved
 
 
-def resolve_depth_control_models(token: str | None, use_int8_base: bool = True) -> dict[str, dict[str, object]]:
+def resolve_depth_control_models(token: str | None) -> dict[str, dict[str, object]]:
     if not token:
         raise ModelResolverError(
             "A Hugging Face token is required to download the depth-control models. Run setup and paste your token first."
         )
-    base_key = "base_int8" if use_int8_base else "base_fp8"
     return {
-        f"depth_control_{base_key}": _select_candidate_for_key("depth_control", base_key, token),
+        "depth_control_base_int8": _select_candidate_for_key("depth_control", "base_int8", token),
         "depth_control_lora": _select_candidate_for_key("depth_control", "refcontrol_depth_lora", token),
     }
 
@@ -321,7 +307,7 @@ def download_models(
     token: str | None,
     progress_cb: Callable[[str], None] | None = None,
     *,
-    engine: str = "default",
+    engine: str = "int8",
 ) -> dict[str, dict[str, object]]:
     if hf_hub_download is None:
         raise ModelResolverError("huggingface_hub is not installed, so model downloads cannot continue.")

@@ -33,7 +33,7 @@ from comfyui_app.comfy_client import ComfyClient
 from comfyui_app.config import COMFYUI_HOST, COMFYUI_PORT, DEFAULT_OUTPUT_DIR
 from comfyui_app.generation import GenerationResult, run_depth_edit, run_edit, run_t2i, run_upscale
 from comfyui_app.model_manager import delete_models as delete_installed_models
-from comfyui_app.model_manager import list_installed_models
+from comfyui_app.model_manager import find_removable_models, list_installed_models, remove_unused_models
 from comfyui_app.model_resolver import ModelResolverError, load_resolved_manifest
 from comfyui_app.ui_utils import pick_directory
 from comfyui_app.vram import detect_vram, select_tier
@@ -43,7 +43,6 @@ logger = logging.getLogger(__name__)
 
 ENGINE_CHOICES = [
     ("INT8 (fastest on Ampere - default)", "int8"),
-    ("fp8", "default"),
     ("Nunchaku INT4 (experimental - faster, needs extra install)", "nunchaku_int4"),
 ]
 UPSCALER_CHOICES = [
@@ -95,7 +94,9 @@ def _status_markdown() -> str:
     if not isinstance(manifest, dict):
         return "Ready. No resolved model manifest found yet."
     models = manifest.get("models")
-    engine = manifest.get("engine", "default")
+    engine = str(manifest.get("engine", "int8"))
+    if engine == "default":
+        engine = "int8"
     if not isinstance(models, dict):
         return "Ready. The resolved model manifest is present, but it is incomplete."
     lines = [f"Ready. Current manifest engine: `{engine}`."]
@@ -156,6 +157,48 @@ def _model_manager_delete(selected_paths: list[str] | None) -> tuple[object, str
         return refreshed[0], refreshed[1], _friendly_error(exc)
 
 
+def _model_manager_cleanup_preview() -> tuple[object, str, object, list[str]]:
+    try:
+        data = find_removable_models()
+        if not data["entries"]:
+            return (
+                "**No unused or duplicate models were found.**",
+                "Nothing to remove.",
+                gr.update(visible=False),
+                [],
+            )
+        lines = ["**Removable models:**"]
+        for entry in data["entries"]:
+            lines.append(f"- `{entry['reason']}`: `{entry['category']}/{entry['filename']}` ({entry['size']})")
+        lines.append("")
+        lines.append(f"**Reclaimable space:** {data['total']} across {data['count']} files")
+        return "\n".join(lines), "Review the list, then confirm removal.", gr.update(visible=True), [
+            str(entry["path"]) for entry in data["entries"] if isinstance(entry.get("path"), str)
+        ]
+    except Exception as exc:
+        return "**Unable to scan removable models.**", _friendly_error(exc), gr.update(visible=False), []
+
+
+def _model_manager_cleanup_confirm(removable_paths: list[str] | None) -> tuple[object, str, object, str, object, list[str]]:
+    try:
+        if not removable_paths:
+            refreshed = _model_manager_payload()
+            return refreshed[0], refreshed[1], "**No removable models selected.**", "Nothing to remove.", gr.update(visible=False), []
+        data = remove_unused_models(removable_paths)
+        refreshed = _model_manager_payload()
+        return (
+            refreshed[0],
+            refreshed[1],
+            f"**Removed {data['freed']} of unused / duplicate models.**",
+            f"Deleted {data['freed']} and refreshed the list.",
+            gr.update(visible=False),
+            [],
+        )
+    except Exception as exc:
+        refreshed = _model_manager_payload()
+        return refreshed[0], refreshed[1], "**Cleanup failed.**", _friendly_error(exc), gr.update(visible=False), []
+
+
 def _edit_handler(
     input_image: object,
     reference_image: object,
@@ -170,7 +213,6 @@ def _edit_handler(
     use_torch_compile: bool,
     mrflow: bool,
     depth_lock: bool,
-    depth_fp8_base: bool,
     live_preview: bool,
 ) -> object:
     try:
@@ -184,7 +226,6 @@ def _edit_handler(
                 negative,
                 output_dir,
                 seed=int(seed),
-                use_fp8_base=bool(depth_fp8_base),
                 megapixels=float(megapixels),
             )
             yield str(result.image_path), None, _as_gr_image(result.preview_path), result.status
@@ -569,11 +610,6 @@ def build_app() -> "gr.Blocks":
                         visible=False,
                     )
                     edit_depth_preview = gr.Image(label="Depth map preview", visible=False)
-                    edit_depth_fp8_base = gr.Checkbox(
-                        label="Use fp8 base instead (fallback if INT8 quality looks off)",
-                        value=False,
-                        visible=False,
-                    )
                     edit_prompt = gr.Textbox(label="Prompt", lines=4)
                     edit_negative = gr.Textbox(label="Negative prompt", lines=3)
                 with gr.Column():
@@ -603,13 +639,13 @@ def build_app() -> "gr.Blocks":
                     edit_status = gr.Textbox(label="Status")
             edit_run = edit_button.click(
                 fn=_edit_handler,
-                inputs=[edit_image, edit_reference, edit_prompt, edit_negative, edit_output, edit_steps, edit_cfg, edit_megapixels, edit_seed, edit_engine, edit_compile, edit_mrflow, edit_depth_lock, edit_depth_fp8_base, edit_live_preview],
+                inputs=[edit_image, edit_reference, edit_prompt, edit_negative, edit_output, edit_steps, edit_cfg, edit_megapixels, edit_seed, edit_engine, edit_compile, edit_mrflow, edit_depth_lock, edit_live_preview],
                 outputs=[edit_result, edit_live_preview_image, edit_depth_preview, edit_status],
             )
             edit_depth_lock.change(
-                fn=lambda enabled: (gr.update(visible=bool(enabled)), gr.update(visible=bool(enabled)), gr.update(visible=bool(enabled)), gr.update(visible=bool(enabled))),
+                fn=lambda enabled: (gr.update(visible=bool(enabled)), gr.update(visible=bool(enabled)), gr.update(visible=bool(enabled))),
                 inputs=[edit_depth_lock],
-                outputs=[edit_reference, edit_depth_note, edit_depth_preview, edit_depth_fp8_base],
+                outputs=[edit_reference, edit_depth_note, edit_depth_preview],
             )
             edit_live_preview.change(
                 fn=lambda enabled: gr.update(visible=bool(enabled)),
@@ -797,12 +833,25 @@ def build_app() -> "gr.Blocks":
                 with gr.Column():
                     model_refresh = gr.Button("Refresh")
                     model_delete = gr.Button("Delete selected")
+                    model_cleanup_button = gr.Button("Remove unused / duplicate models")
+                    model_cleanup_confirm = gr.Button("Confirm removal", visible=False)
                     model_total = gr.Markdown("**Total installed model files:** 0  \n**Disk usage:** 0 B")
+                    model_cleanup_preview = gr.Markdown("**No cleanup preview yet.**")
                     model_status = gr.Textbox(label="Status")
                 with gr.Column():
                     model_list = gr.CheckboxGroup(label="Installed models", choices=[], value=[])
+                    model_cleanup_state = gr.State([])
             model_refresh.click(fn=_model_manager_refresh, outputs=[model_list, model_total, model_status])
             model_delete.click(fn=_model_manager_delete, inputs=[model_list], outputs=[model_list, model_total, model_status])
+            model_cleanup_button.click(
+                fn=_model_manager_cleanup_preview,
+                outputs=[model_cleanup_preview, model_status, model_cleanup_confirm, model_cleanup_state],
+            )
+            model_cleanup_confirm.click(
+                fn=_model_manager_cleanup_confirm,
+                inputs=[model_cleanup_state],
+                outputs=[model_list, model_total, model_cleanup_preview, model_status, model_cleanup_confirm, model_cleanup_state],
+            )
 
         demo.load(fn=_model_manager_refresh, outputs=[model_list, model_total, model_status])
         demo.queue()

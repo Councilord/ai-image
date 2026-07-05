@@ -180,12 +180,12 @@ def test_image_edit_handler_routes_to_depth_path_only_when_enabled(monkeypatch) 
     monkeypatch.setattr(app, "run_edit", fake_run_edit)
     monkeypatch.setattr(app, "run_depth_edit", fake_run_depth_edit)
 
-    result = list(app._edit_handler("input.png", None, "prompt", "negative", "out", 4, 1.0, 1.0, 0, "default", False, False, False, False, False))
+    result = list(app._edit_handler("input.png", None, "prompt", "negative", "out", 4, 1.0, 1.0, 0, "int8", False, False, False, False))
     assert result == [("edit.png", None, None, "edit")]
     assert calls[0][0] == "edit"
 
     calls.clear()
-    result = list(app._edit_handler("input.png", "reference.png", "prompt", "negative", "out", 4, 1.0, 1.0, 0, "default", False, False, True, False, False))
+    result = list(app._edit_handler("input.png", "reference.png", "prompt", "negative", "out", 4, 1.0, 1.0, 0, "int8", False, False, True, False))
     assert result == [("depth.png", None, "depth-map.png", "depth")]
     assert calls[0][0] == "depth"
 
@@ -195,14 +195,21 @@ def test_app_default_engine_is_int8() -> None:
     assert app.ENGINE_CHOICES[0] == ("INT8 (fastest on Ampere - default)", "int8")
 
 
-def test_app_exposes_depth_fp8_fallback_checkbox() -> None:
+def test_app_exposes_model_cleanup_controls() -> None:
     demo = app.build_app()
+    button_values = [
+        component.get("props", {}).get("value")
+        for component in demo.config["components"]
+        if isinstance(component, dict) and component.get("type") == "button"
+    ]
     labels = [
         component.get("props", {}).get("label")
         for component in demo.config["components"]
         if isinstance(component, dict)
     ]
-    assert "Use fp8 base instead (fallback if INT8 quality looks off)" in labels
+    assert "Remove unused / duplicate models" in button_values
+    assert "Confirm removal" in button_values
+    assert not any(label and "base instead" in str(label).lower() for label in labels)
 
 
 def test_t2i_handler_streams_preview_then_final(monkeypatch) -> None:
@@ -214,7 +221,7 @@ def test_t2i_handler_streams_preview_then_final(monkeypatch) -> None:
 
     monkeypatch.setattr(app, "run_t2i", fake_run_t2i)
 
-    events = list(app._t2i_handler("prompt", "negative", "out", 1024, 1024, 4, 1.0, 0, "default", False, False, True))
+    events = list(app._t2i_handler("prompt", "negative", "out", 1024, 1024, 4, 1.0, 0, "int8", False, False, True))
 
     assert events[0] == (None, "preview-1", "Rendering preview...")
     assert events[1] == (None, "preview-2", "Rendering preview...")
@@ -252,8 +259,8 @@ def test_run_depth_edit_uses_requested_base_variant(monkeypatch, tmp_path: Path)
         def get_images(self, prompt_id: str):
             return [FakeImage("depth"), FakeImage("final")]
 
-    def fake_depth_assets(use_fp8_base: bool = False) -> tuple[str, str]:
-        recorded["use_fp8_base"] = use_fp8_base
+    def fake_depth_assets() -> tuple[str, str]:
+        recorded["depth_assets_called"] = True
         return ("base.safetensors", "lora.safetensors")
 
     def fake_resolved_filename_map(vram_gb: float, prefer_gguf: bool, engine: str) -> dict[str, str]:
@@ -263,13 +270,10 @@ def test_run_depth_edit_uses_requested_base_variant(monkeypatch, tmp_path: Path)
     monkeypatch.setattr(generation, "_resolved_filename_map", fake_resolved_filename_map)
     monkeypatch.setattr(generation, "detect_vram", lambda: (8.0, "RTX", True))
 
-    result = generation.run_depth_edit(tmp_path / "input.png", None, "prompt", "negative", tmp_path, use_fp8_base=False, client=FakeClient())
-    assert recorded["use_fp8_base"] is False
+    result = generation.run_depth_edit(tmp_path / "input.png", None, "prompt", "negative", tmp_path, client=FakeClient())
+    assert recorded["depth_assets_called"] is True
     assert recorded["diffusion_model"] == "base.safetensors"
     assert result.status.startswith("Saved image to ")
     assert result.preview_path is not None
     assert result.preview_path.read_text(encoding="utf-8") == "depth"
     assert result.image_path.read_text(encoding="utf-8") == "final"
-
-    generation.run_depth_edit(tmp_path / "input.png", None, "prompt", "negative", tmp_path, use_fp8_base=True, client=FakeClient())
-    assert recorded["use_fp8_base"] is True

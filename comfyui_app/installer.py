@@ -90,7 +90,7 @@ def _install_experimental_speedups() -> None:
         _install_custom_node("https://github.com/nunchaku-ai/ComfyUI-nunchaku.git", custom_nodes / "ComfyUI-nunchaku")
     except Exception as exc:
         print(f"WARNING: The Nunchaku custom node could not be prepared: {exc}")
-        print("You can still use the default FP8 workflow.")
+        print("You can still use the default INT8 workflow.")
 
     try:
         print("Trying to install the Nunchaku Python package...")

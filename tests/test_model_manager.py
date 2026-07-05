@@ -79,3 +79,43 @@ def test_delete_models_rejects_outside_tree(tmp_path: Path, monkeypatch) -> None
     except ModelResolverError as exc:
         assert "outside the ComfyUI model tree" in exc.message
     assert outside.exists()
+
+
+def test_find_removable_models_reports_unused_and_duplicate_entries(tmp_path: Path, monkeypatch) -> None:
+    comfyui_dir = tmp_path / "ComfyUI"
+    models_dir = comfyui_dir / "models"
+    kept = _write_file(models_dir / "upscale_models" / "RealESRGAN_x2plus.pth", b"keep")
+    duplicate = _write_file(models_dir / "cache" / "RealESRGAN_x2plus.pth", b"dup")
+    unused = _write_file(models_dir / "diffusion_models" / "unknown_model.safetensors", b"unused")
+    _write_file(comfyui_dir / "custom_nodes" / "comfyui_controlnet_aux" / "ckpts" / "ignored.pth", b"aux")
+
+    monkeypatch.setattr(model_manager, "COMFYUI_DIR", comfyui_dir)
+    monkeypatch.setattr(model_manager, "MODELS_DIR", models_dir)
+
+    payload = model_manager.find_removable_models()
+    reasons = {entry["reason"] for entry in payload["entries"]}
+    paths = {Path(str(entry["path"])) for entry in payload["entries"]}
+
+    assert payload["count"] == 2
+    assert payload["total_bytes"] == len(b"dup") + len(b"unused")
+    assert reasons == {"duplicate", "unused"}
+    assert duplicate in paths
+    assert unused in paths
+    assert kept not in paths
+    assert not any("comfyui_controlnet_aux" in str(path) for path in paths)
+
+
+def test_remove_unused_models_deletes_found_entries(tmp_path: Path, monkeypatch) -> None:
+    comfyui_dir = tmp_path / "ComfyUI"
+    models_dir = comfyui_dir / "models"
+    duplicate = _write_file(models_dir / "cache" / "RealESRGAN_x2plus.pth", b"dup")
+    unused = _write_file(models_dir / "diffusion_models" / "unknown_model.safetensors", b"unused")
+
+    monkeypatch.setattr(model_manager, "COMFYUI_DIR", comfyui_dir)
+    monkeypatch.setattr(model_manager, "MODELS_DIR", models_dir)
+
+    payload = model_manager.remove_unused_models([duplicate, unused])
+
+    assert payload["freed_bytes"] == len(b"dup") + len(b"unused")
+    assert not duplicate.exists()
+    assert not unused.exists()

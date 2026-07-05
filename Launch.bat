@@ -55,7 +55,7 @@ set "SAGE_FLAG="
 for /f "usebackq delims=" %%A in (`python -c "import sageattention; print('--use-sage-attention')" 2^>nul`) do set "SAGE_FLAG=%%A"
 
 REM RTX 3070 / Ampere: scope --fast to fp16_accumulation (real Ampere speedup);
-REM fp8_matrix_mult is a no-op on Ampere. --reserve-vram leaves headroom for the
+REM The matrix-mult flag is a no-op on Ampere. --reserve-vram leaves headroom for the
 REM Windows display to avoid OOM/offload stalls. --fast-disk speeds offload on NVMe.
 echo Starting ComfyUI...
 start "ComfyUI" /b python "ComfyUI\main.py" --listen %COMFYUI_HOST% --port %COMFYUI_PORT% --fast fp16_accumulation --reserve-vram 0.8 --fast-disk --preview-method latent2rgb %SAGE_FLAG% %EXTRA_FLAGS%
